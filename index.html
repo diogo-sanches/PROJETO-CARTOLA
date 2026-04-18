@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Cartola FC Stats - Análise avançada de jogadores e times do Brasileirão para o Cartola FC 2026. Scout, estatísticas, comparações e recomendações de escalação." />
+  <title>Cartola FC Stats | Análise & Estatísticas 2026</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p class="loading-text">Carregando dados do Cartola FC...</p>
+  </div>
+
+  <div id="app">
+    <!-- Sidebar Overlay (mobile) -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">⚽</div>
+          <div class="sidebar-logo-text">
+            <h1>Cartola Stats</h1>
+            <span>Brasileirão 2026</span>
+          </div>
+        </div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <button class="nav-item active" data-view="dashboard" id="nav-dashboard">
+          <span class="nav-item-icon">🏠</span>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-view="players" id="nav-players">
+          <span class="nav-item-icon">⚽</span>
+          <span>Jogadores</span>
+        </button>
+        <button class="nav-item" data-view="teams" id="nav-teams">
+          <span class="nav-item-icon">🏟️</span>
+          <span>Times</span>
+        </button>
+        <button class="nav-item" data-view="compare" id="nav-compare">
+          <span class="nav-item-icon">⚖️</span>
+          <span>Comparar</span>
+        </button>
+        <button class="nav-item" data-view="recommendations" id="nav-recommendations">
+          <span class="nav-item-icon">💡</span>
+          <span>Recomendações</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="market-status" id="market-status">
+          <div class="market-status-dot" id="market-dot"></div>
+          <div class="market-status-text">
+            <strong id="market-label">Carregando...</strong>
+            <span id="market-round">---</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="main-header">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+          <div class="header-title">
+            <span class="header-title-icon" id="header-icon">🏠</span>
+            <h2 id="header-text">Dashboard</h2>
+          </div>
+        </div>
+        <div class="header-info">
+          <div class="header-badge" id="header-round">
+            ⚽ Rodada <strong id="header-round-num">--</strong>
+          </div>
+          <div class="header-badge" id="header-season">
+            📅 Temporada <strong id="header-season-year">----</strong>
+          </div>
+        </div>
+      </header>
+      <div class="page-content" id="page-content">
+        <!-- Dynamic content injected here -->
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
