@@ -9,6 +9,7 @@ import { renderCompare, destroyCompare } from './views/compare.js';
 import { renderRecommendations, destroyRecommendations } from './views/recommendations.js';
 import { renderPlayerProfile, destroyPlayerProfile } from './views/player-profile.js';
 import { renderParciais, destroyParciais } from './views/parciais.js';
+import { renderEscalados, destroyEscalados } from './views/escalados.js';
 
 // ===== VIEW CONFIG =====
 const VIEWS = {
@@ -47,6 +48,12 @@ const VIEWS = {
     icon: '📡',
     render: renderParciais,
     destroy: destroyParciais,
+  },
+  escalados: {
+    title: 'Mais Escalados',
+    icon: '🔝',
+    render: renderEscalados,
+    destroy: destroyEscalados,
   },
   'player-profile': {
     title: 'Perfil do Jogador',

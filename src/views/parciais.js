@@ -29,6 +29,35 @@ export async function renderParciais(container) {
         </div>
       </div>
 
+      <!-- Scout Legend -->
+      <div class="card" style="margin-bottom:20px;padding:14px">
+        <details>
+          <summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--text-secondary);user-select:none">
+            📖 Legenda dos Scouts <span style="font-size:10px;color:var(--text-muted)">(clique para expandir)</span>
+          </summary>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:6px;margin-top:12px">
+            <div class="scout-legend-item"><span class="scout-icon positive">⚽</span><span><strong>G</strong> — Gol</span><span class="scout-pts positive">+8.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon positive">🅰️</span><span><strong>A</strong> — Assistência</span><span class="scout-pts positive">+5.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon positive">🧤</span><span><strong>SG</strong> — Jogo Sem Gol</span><span class="scout-pts positive">+5.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon positive">🧱</span><span><strong>DE</strong> — Defesa</span><span class="scout-pts positive">+1.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon positive">💪</span><span><strong>DS</strong> — Desarme</span><span class="scout-pts positive">+1.2</span></div>
+            <div class="scout-legend-item"><span class="scout-icon positive">🎯</span><span><strong>FD</strong> — Final. Defendida</span><span class="scout-pts positive">+1.2</span></div>
+            <div class="scout-legend-item"><span class="scout-icon positive">🦶</span><span><strong>FS</strong> — Falta Sofrida</span><span class="scout-pts positive">+0.5</span></div>
+            <div class="scout-legend-item"><span class="scout-icon positive">🏆</span><span><strong>V</strong> — Vitória (Téc.)</span><span class="scout-pts positive">+1.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon positive">🥅</span><span><strong>PE</strong> — Pênalti</span><span class="scout-pts positive">+7.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon negative">🟨</span><span><strong>CA</strong> — Cartão Amarelo</span><span class="scout-pts negative">-1.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon negative">🟥</span><span><strong>CV</strong> — Cartão Vermelho</span><span class="scout-pts negative">-3.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon negative">😰</span><span><strong>GS</strong> — Gol Sofrido</span><span class="scout-pts negative">-1.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon negative">❌</span><span><strong>GC</strong> — Gol Contra</span><span class="scout-pts negative">-3.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon negative">🏳️</span><span><strong>FC</strong> — Falta Cometida</span><span class="scout-pts negative">-0.3</span></div>
+            <div class="scout-legend-item"><span class="scout-icon negative">🚫</span><span><strong>PP</strong> — Pênalti Perdido</span><span class="scout-pts negative">-4.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon neutral">📐</span><span><strong>FF</strong> — Final. Pra Fora</span><span class="scout-pts neutral">+0.8</span></div>
+            <div class="scout-legend-item"><span class="scout-icon neutral">🪵</span><span><strong>FT</strong> — Final. na Trave</span><span class="scout-pts neutral">+3.0</span></div>
+            <div class="scout-legend-item"><span class="scout-icon neutral">🏳️‍⬛</span><span><strong>I</strong> — Impedimento</span><span class="scout-pts negative">-0.1</span></div>
+          </div>
+        </details>
+      </div>
+
       <!-- Matches Summary -->
       <div id="parciais-matches" class="card" style="margin-bottom:20px">
         <div style="text-align:center;padding:20px">
