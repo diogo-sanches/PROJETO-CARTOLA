@@ -6,5 +6,7 @@ echo  ==========================================
 echo   🏆 CARTOLA FC STATS - Iniciando servidor
 echo  ==========================================
 echo.
+start "" "http://localhost:5173" 2>nul
+timeout /t 2 /nobreak >nul
 call npm run dev
 pause
