@@ -1,37 +1,21 @@
 // ===== MAIS ESCALADOS VIEW =====
-// Shows most picked players based on pontuados data (escalacoes field)
-import { getData, formatPrice, formatVariation, getPosition } from '../api.js';
-import { isHistoryLoaded, onHistoryLoaded } from '../history.js';
+import { getData, formatPrice, formatVariation, getPosition, fetchScoredByRound } from '../api.js';
+import { isHistoryLoaded, onHistoryLoaded, getRoundScored } from '../history.js';
 import { calcPlayerStats } from '../stats.js';
+
+let _selectedRound = null;
 
 export function renderEscalados(container) {
   const data = getData();
   if (!data) return;
 
   const { athletes, market } = data;
-  
-  // Use 'minimo_para_valorizar' or sort by media + preco to simulate popularity
-  // The API atletas/mercado contains the field 'variacao_num' and 'media_num' 
-  // We'll rank by a combination of status=provavel + media + low std deviation
-  
+  _selectedRound = market.rodada_atual;
+  const totalRounds = market.rodada_final || 38;
+
   const probable = athletes.filter(a => a.status_id === 7 && a.jogos_num > 0);
 
-  // Build popularity score: higher media + cheaper = more likely to be picked
-  // Weight: 60% media, 20% cost-efficiency, 20% recent form
-  let ranked = probable.map(a => {
-    let stats = null;
-    let recentAvg = a.media_num;
-    if (isHistoryLoaded()) {
-      stats = calcPlayerStats(a.atleta_id);
-      if (stats && stats.history.length > 0) {
-        recentAvg = stats.history.slice(-3).reduce((s, h) => s + h.pontuacao, 0) / Math.max(stats.history.slice(-3).length, 1);
-      }
-    }
-    const efficiency = a.preco_num > 0 ? a.media_num / a.preco_num : 0;
-    const popScore = a.media_num * 0.6 + efficiency * 3 + recentAvg * 0.2;
-    return { ...a, popScore, recentAvg, stats, efficiency };
-  });
-
+  let ranked = buildRanking(probable);
   let currentPos = 0;
 
   function renderTable(posFilter) {
@@ -91,7 +75,7 @@ export function renderEscalados(container) {
     `;
   }
 
-  // Build position breakdown cards
+  // Position summary cards
   const posCounts = {};
   [1,2,3,4,5].forEach(p => {
     const pos = getPosition(p);
@@ -105,7 +89,17 @@ export function renderEscalados(container) {
       <div class="card" style="margin-bottom:20px">
         <div class="card-header">
           <div class="card-title">🔝 Mais Escalados</div>
-          <div class="card-subtitle">Jogadores mais populares por posição · Rodada ${market.rodada_atual}</div>
+          <div class="card-subtitle">Jogadores mais populares por posição</div>
+        </div>
+
+        <!-- Round Selector -->
+        <div style="display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap">
+          <label style="font-size:13px;font-weight:600;color:var(--text-secondary)">Rodada:</label>
+          <select id="esc-round-select" class="round-select">
+            ${Array.from({ length: totalRounds }, (_, i) => i + 1).map(r => 
+              `<option value="${r}" ${r === _selectedRound ? 'selected' : ''}>Rodada ${r}${r === market.rodada_atual ? ' (atual)' : ''}</option>`
+            ).join('')}
+          </select>
         </div>
 
         <!-- Position summary -->
@@ -139,7 +133,15 @@ export function renderEscalados(container) {
     </div>
   `;
 
-  // Bind filters
+  // Bind round selector
+  document.getElementById('esc-round-select').addEventListener('change', async (e) => {
+    const round = parseInt(e.target.value);
+    _selectedRound = round;
+    await loadRoundData(round, probable);
+    renderTable(currentPos);
+  });
+
+  // Bind position filters
   container.querySelectorAll('.pos-btn[data-escpos]').forEach(btn => {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.pos-btn[data-escpos]').forEach(b => b.classList.remove('active'));
@@ -161,20 +163,52 @@ export function renderEscalados(container) {
 
   if (!isHistoryLoaded()) {
     onHistoryLoaded(() => {
-      // Recalc with history
-      ranked = probable.map(a => {
-        const stats = calcPlayerStats(a.atleta_id);
-        let recentAvg = a.media_num;
-        if (stats && stats.history.length > 0) {
-          recentAvg = stats.history.slice(-3).reduce((s, h) => s + h.pontuacao, 0) / Math.max(stats.history.slice(-3).length, 1);
-        }
-        const efficiency = a.preco_num > 0 ? a.media_num / a.preco_num : 0;
-        const popScore = a.media_num * 0.6 + efficiency * 3 + recentAvg * 0.2;
-        return { ...a, popScore, recentAvg, stats, efficiency };
-      });
+      ranked = buildRanking(probable);
       renderTable(currentPos);
     });
   }
+
+  async function loadRoundData(round, probablePlayers) {
+    // Load scored data for specific round to enrich ranking
+    try {
+      let scoredAtletas = {};
+      if (isHistoryLoaded()) {
+        scoredAtletas = getRoundScored(round) || {};
+      }
+      if (Object.keys(scoredAtletas).length === 0) {
+        const scoredData = await fetchScoredByRound(round);
+        scoredAtletas = scoredData?.atletas || {};
+      }
+
+      // Enrich ranking with round-specific points
+      ranked = probablePlayers.map(a => {
+        const roundData = scoredAtletas[String(a.atleta_id)];
+        const roundPts = roundData?.pontuacao || 0;
+        const efficiency = a.preco_num > 0 ? a.media_num / a.preco_num : 0;
+        const recentAvg = roundData ? roundPts : a.media_num;
+        const popScore = a.media_num * 0.4 + efficiency * 2 + recentAvg * 0.4;
+        return { ...a, popScore, recentAvg, efficiency, stats: null };
+      });
+    } catch {
+      ranked = buildRanking(probablePlayers);
+    }
+  }
+}
+
+function buildRanking(probable) {
+  return probable.map(a => {
+    let stats = null;
+    let recentAvg = a.media_num;
+    if (isHistoryLoaded()) {
+      stats = calcPlayerStats(a.atleta_id);
+      if (stats && stats.history.length > 0) {
+        recentAvg = stats.history.slice(-3).reduce((s, h) => s + h.pontuacao, 0) / Math.max(stats.history.slice(-3).length, 1);
+      }
+    }
+    const efficiency = a.preco_num > 0 ? a.media_num / a.preco_num : 0;
+    const popScore = a.media_num * 0.6 + efficiency * 3 + recentAvg * 0.2;
+    return { ...a, popScore, recentAvg, stats, efficiency };
+  });
 }
 
 export function destroyEscalados() {

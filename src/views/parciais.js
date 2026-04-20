@@ -1,6 +1,6 @@
 // ===== PARCIAIS VIEW =====
 // Live/partial scores for current round
-import { getData, fetchScored, fetchMatchesByRound, getPosition, formatPrice } from '../api.js';
+import { getData, fetchScored, getPosition, formatPrice } from '../api.js';
 
 let refreshInterval = null;
 
@@ -58,14 +58,6 @@ export async function renderParciais(container) {
         </details>
       </div>
 
-      <!-- Matches Summary -->
-      <div id="parciais-matches" class="card" style="margin-bottom:20px">
-        <div style="text-align:center;padding:20px">
-          <div class="loading-spinner" style="margin:0 auto 8px"></div>
-          <span style="color:var(--text-muted);font-size:12px">Carregando jogos...</span>
-        </div>
-      </div>
-
       <!-- Scored Players Table -->
       <div class="card" id="parciais-table">
         <div style="text-align:center;padding:30px">
@@ -94,74 +86,20 @@ let _clubsMap = null;
 
 async function loadParciais(round) {
   try {
-    const [scored, matches] = await Promise.all([
-      fetchScored(),
-      fetchMatchesByRound(round),
-    ]);
+    const scored = await fetchScored();
 
     _scoredData = scored;
-    _matchesData = matches;
-    _clubsMap = matches.clubes || {};
 
     const updateEl = document.getElementById('parciais-update-time');
     if (updateEl) updateEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
 
-    renderMatchesSummary();
     renderScoredTable(0);
   } catch (e) {
     console.error('Erro ao carregar parciais:', e);
   }
 }
 
-function renderMatchesSummary() {
-  const container = document.getElementById('parciais-matches');
-  if (!container || !_matchesData) return;
 
-  const matches = _matchesData.partidas || [];
-
-  container.innerHTML = `
-    <div class="card-header">
-      <div class="card-title">🏟️ Jogos da Rodada</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:12px;margin-top:12px">
-      ${matches.map(m => {
-        const home = _clubsMap[m.clube_casa_id];
-        const away = _clubsMap[m.clube_visitante_id];
-        const homeName = home?.nome_fantasia || home?.nome || '???';
-        const awayName = away?.nome_fantasia || away?.nome || '???';
-        const homeBadge = home?.escudos?.['30x30'] || '';
-        const awayBadge = away?.escudos?.['30x30'] || '';
-        
-        const isLive = m.periodo_tr === 'JOGO' || m.status_transmissao_tr === 'EM_ANDAMENTO';
-        const isFinished = m.periodo_tr === 'POS_JOGO';
-        const statusLabel = isLive ? '🔴 AO VIVO' : isFinished ? '✅ Encerrado' : '⏳ Aguardando';
-        const statusColor = isLive ? 'var(--accent-red)' : isFinished ? 'var(--accent-green)' : 'var(--text-muted)';
-
-        return `
-        <div style="background:var(--bg-secondary);border-radius:var(--radius-md);padding:12px;border:1px solid var(--border-color)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span style="font-size:10px;color:${statusColor};font-weight:700">${statusLabel}</span>
-            <span style="font-size:10px;color:var(--text-muted)">${m.local || ''}</span>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <div style="display:flex;align-items:center;gap:6px;flex:1">
-              <img src="${homeBadge}" alt="" style="width:24px;height:24px" onerror="this.style.display='none'">
-              <span style="font-size:13px;font-weight:600">${homeName}</span>
-            </div>
-            <div style="font-size:18px;font-weight:800;padding:0 12px;min-width:50px;text-align:center">
-              ${m.placar_oficial_mandante ?? '-'} x ${m.placar_oficial_visitante ?? '-'}
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end">
-              <span style="font-size:13px;font-weight:600">${awayName}</span>
-              <img src="${awayBadge}" alt="" style="width:24px;height:24px" onerror="this.style.display='none'">
-            </div>
-          </div>
-        </div>
-        `;
-      }).join('')}
-    </div>
-  `;
-}
 
 function renderScoredTable(posFilter) {
   const container = document.getElementById('parciais-table');
@@ -261,6 +199,4 @@ function renderScoredTable(posFilter) {
 export function destroyParciais() {
   if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
   _scoredData = null;
-  _matchesData = null;
-  _clubsMap = null;
 }

@@ -9,6 +9,7 @@ import { renderCompare, destroyCompare } from './views/compare.js';
 import { renderRecommendations, destroyRecommendations } from './views/recommendations.js';
 import { renderPlayerProfile, destroyPlayerProfile } from './views/player-profile.js';
 import { renderParciais, destroyParciais } from './views/parciais.js';
+import { renderJogos, destroyJogos } from './views/jogos.js';
 import { renderEscalados, destroyEscalados } from './views/escalados.js';
 
 // ===== VIEW CONFIG =====
@@ -48,6 +49,12 @@ const VIEWS = {
     icon: '📡',
     render: renderParciais,
     destroy: destroyParciais,
+  },
+  jogos: {
+    title: 'Jogos da Rodada',
+    icon: '🏟️',
+    render: renderJogos,
+    destroy: destroyJogos,
   },
   escalados: {
     title: 'Mais Escalados',
