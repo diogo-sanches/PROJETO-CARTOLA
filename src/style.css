@@ -1617,3 +1617,43 @@ ul, ol { list-style: none; }
   box-shadow: 0 2px 6px rgba(0, 230, 118, 0.25);
 }
 
+/* ===== SMALL VENUE TOGGLE (Compare) ===== */
+.venue-toggle-sm {
+  display: inline-flex;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.venue-btn-sm {
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.venue-btn-sm:hover {
+  color: var(--text-primary);
+}
+
+.venue-btn-sm.active {
+  background: var(--accent-blue);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(66, 165, 245, 0.3);
+}
+
+/* Player 2 uses green */
+[data-player="2"].venue-btn-sm.active {
+  background: var(--accent-green);
+  box-shadow: 0 1px 4px rgba(0, 230, 118, 0.3);
+}
+
+/* ===== UTILITY ===== */
+.hidden {
+  display: none !important;
+}
+

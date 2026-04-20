@@ -62,6 +62,22 @@ export async function fetchMatches() {
   }
 }
 
+export async function fetchMatchesByRound(round) {
+  try {
+    return await fetchJSON(`/partidas/${round}`);
+  } catch {
+    return { partidas: [] };
+  }
+}
+
+export async function fetchScoredByRound(round) {
+  try {
+    return await fetchJSON(`/atletas/pontuados/${round}`);
+  } catch {
+    return { atletas: {} };
+  }
+}
+
 // ===== DATA HELPERS =====
 
 const POSITION_MAP = {

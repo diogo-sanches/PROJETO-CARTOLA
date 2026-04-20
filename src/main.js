@@ -8,6 +8,7 @@ import { renderTeams, destroyTeams } from './views/teams.js';
 import { renderCompare, destroyCompare } from './views/compare.js';
 import { renderRecommendations, destroyRecommendations } from './views/recommendations.js';
 import { renderPlayerProfile, destroyPlayerProfile } from './views/player-profile.js';
+import { renderParciais, destroyParciais } from './views/parciais.js';
 
 // ===== VIEW CONFIG =====
 const VIEWS = {
@@ -40,6 +41,12 @@ const VIEWS = {
     icon: '💡',
     render: renderRecommendations,
     destroy: destroyRecommendations,
+  },
+  parciais: {
+    title: 'Parciais',
+    icon: '📡',
+    render: renderParciais,
+    destroy: destroyParciais,
   },
   'player-profile': {
     title: 'Perfil do Jogador',
