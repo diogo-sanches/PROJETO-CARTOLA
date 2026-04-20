@@ -87,7 +87,7 @@ async function loadRound(round) {
     });
 
     // Stats summary
-    const finished = matches.filter(m => m.periodo_tr === 'POS_JOGO').length;
+    const finished = matches.filter(m => m.valida === true || m.periodo_tr === 'POS_JOGO').length;
     const live = matches.filter(m => m.periodo_tr === 'JOGO' || m.status_transmissao_tr === 'EM_ANDAMENTO').length;
     const pending = matches.length - finished - live;
     const totalGoals = matches.reduce((s, m) => s + (m.placar_oficial_mandante || 0) + (m.placar_oficial_visitante || 0), 0);
@@ -160,12 +160,11 @@ async function loadRound(round) {
               const awayBadge = away?.escudos?.['45x45'] || away?.escudos?.['30x30'] || '';
               
               const isLive = m.periodo_tr === 'JOGO' || m.status_transmissao_tr === 'EM_ANDAMENTO';
-              const isFinished = m.periodo_tr === 'POS_JOGO';
+              const isFinished = m.valida === true || m.periodo_tr === 'POS_JOGO';
               const isPending = !isLive && !isFinished;
               
               const statusLabel = isLive ? '🔴 AO VIVO' : isFinished ? '✅ Encerrado' : '⏳ Aguardando';
               const statusColor = isLive ? 'var(--accent-red)' : isFinished ? 'var(--accent-green)' : 'var(--text-muted)';
-              
               const time = m.partida_data ? m.partida_data.split(' ')[1]?.substring(0, 5) : '';
 
               // Form
@@ -192,7 +191,7 @@ async function loadRound(round) {
                   </div>
                   <div style="padding:0 20px;text-align:center">
                     <div style="font-size:32px;font-weight:900;letter-spacing:2px;color:${isLive ? 'var(--accent-red)' : 'var(--text-primary)'}">
-                      ${isPending ? 'vs' : `${m.placar_oficial_mandante ?? '-'} x ${m.placar_oficial_visitante ?? '-'}`}
+                      ${isPending ? 'vs' : `${m.placar_oficial_mandante != null ? m.placar_oficial_mandante : '-'} x ${m.placar_oficial_visitante != null ? m.placar_oficial_visitante : '-'}`}
                     </div>
                   </div>
                   <div style="flex:1;text-align:center">
