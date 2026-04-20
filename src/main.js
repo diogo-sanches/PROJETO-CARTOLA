@@ -106,6 +106,9 @@ function navigateTo(viewName, params = {}) {
 
 // Expose navigation globally for views
 window.__navigateTo = (view, params) => navigateTo(view, params);
+window.__openPlayerProfile = (atletaId, playerName) => {
+  navigateTo('player-profile', { atletaId, playerName });
+};
 
 // ===== MARKET STATUS =====
 function updateMarketStatus(market) {
