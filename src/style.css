@@ -1523,3 +1523,97 @@ ul, ol { list-style: none; }
   border-color: var(--accent-green);
 }
 
+/* ===== MARKET CLOSED BADGE ===== */
+.market-closed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 28px;
+  background: linear-gradient(135deg, rgba(239, 83, 80, 0.15), rgba(239, 83, 80, 0.05));
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: 16px;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent-red);
+  letter-spacing: 1px;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 83, 80, 0); }
+  50% { box-shadow: 0 0 20px 4px rgba(239, 83, 80, 0.15); }
+}
+
+.market-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.market-pulse.open {
+  background: var(--accent-green);
+  animation: pulse-dot 1.5s infinite;
+}
+
+.market-pulse.closed {
+  background: var(--accent-red);
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.countdown-block.closed-block {
+  background: rgba(239, 83, 80, 0.1);
+  border: 1px solid rgba(239, 83, 80, 0.15);
+}
+
+.countdown-value.closed-value {
+  color: var(--accent-red);
+}
+
+/* ===== POSITION SUBMENU ===== */
+.pos-submenu {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  flex: 1;
+}
+
+.pos-submenu::-webkit-scrollbar {
+  display: none;
+}
+
+.pos-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.pos-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+  background: var(--bg-secondary);
+}
+
+.pos-btn.active {
+  color: var(--bg-primary);
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  box-shadow: 0 2px 6px rgba(0, 230, 118, 0.25);
+}
+

@@ -13,26 +13,13 @@ export function renderDashboard(container) {
   const mostAppreciated = getMostAppreciated(5);
   const mostDepreciated = getMostDepreciated(5);
 
-  // Position distribution
-  const positionCounts = {};
-  activeAthletes.forEach(a => {
-    const pos = a.position.abr;
-    positionCounts[pos] = (positionCounts[pos] || 0) + 1;
-  });
-
-  // Average price by position
-  const avgPrices = {};
-  [1,2,3,4,5,6].forEach(pos => {
-    const posAthletes = activeAthletes.filter(a => a.posicao_id === pos && a.preco_num > 0);
-    avgPrices[pos] = posAthletes.length > 0 
-      ? posAthletes.reduce((s, a) => s + a.preco_num, 0) / posAthletes.length
-      : 0;
-  });
-
   const clubCount = Object.keys(clubs).length;
   
-  // Countdown
+  // Countdown - closing time
   const closingTime = market.fechamento ? new Date(market.fechamento.timestamp * 1000) : null;
+  const isMarketOpen = market.status_mercado === 1;
+  const now = Date.now();
+  const isClosed = closingTime && now >= closingTime.getTime();
   
   container.innerHTML = `
     <!-- Stats Grid -->
@@ -71,26 +58,12 @@ export function renderDashboard(container) {
       </div>
     </div>
 
-    ${closingTime ? `
-    <!-- Countdown -->
-    <div class="card animate-in animate-in-delay-1" style="margin-bottom:24px">
-      <div class="card-header">
-        <div class="card-title">⏱️ Fechamento do Mercado</div>
-        <div style="font-size:13px;color:var(--text-secondary)">
-          ${closingTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
-        </div>
-      </div>
-      <div class="countdown" id="countdown-timer" data-timestamp="${market.fechamento.timestamp}">
-        <div class="countdown-block"><span class="countdown-value" id="cd-days">--</span><span class="countdown-label">Dias</span></div>
-        <span class="countdown-sep">:</span>
-        <div class="countdown-block"><span class="countdown-value" id="cd-hours">--</span><span class="countdown-label">Horas</span></div>
-        <span class="countdown-sep">:</span>
-        <div class="countdown-block"><span class="countdown-value" id="cd-minutes">--</span><span class="countdown-label">Min</span></div>
-        <span class="countdown-sep">:</span>
-        <div class="countdown-block"><span class="countdown-value" id="cd-seconds">--</span><span class="countdown-label">Seg</span></div>
+    <!-- Countdown / Market Status -->
+    <div class="card animate-in animate-in-delay-1" style="margin-bottom:24px" id="market-status-card">
+      <div id="market-status-content">
+        <!-- Filled by JS -->
       </div>
     </div>
-    ` : ''}
 
     <!-- Top Players Grid -->
     <div class="grid-2" style="margin-bottom:24px">
@@ -142,8 +115,8 @@ export function renderDashboard(container) {
     </div>
   `;
 
-  // Start countdown
-  if (closingTime) startCountdown(market.fechamento.timestamp);
+  // Start market status timer
+  startMarketTimer(market);
 }
 
 function renderPlayerListItem(player, index, valueKey) {
@@ -176,33 +149,124 @@ function renderPlayerListItem(player, index, valueKey) {
 
 let countdownInterval = null;
 
-function startCountdown(timestamp) {
+function startMarketTimer(market) {
   if (countdownInterval) clearInterval(countdownInterval);
+
+  const closingTimestamp = market.fechamento?.timestamp;
+  const isMarketOpen = market.status_mercado === 1;
   
   function update() {
+    const container = document.getElementById('market-status-content');
+    if (!container) { clearInterval(countdownInterval); return; }
+
     const now = Math.floor(Date.now() / 1000);
-    let diff = timestamp - now;
-    if (diff <= 0) {
-      document.getElementById('cd-days').textContent = '00';
-      document.getElementById('cd-hours').textContent = '00';
-      document.getElementById('cd-minutes').textContent = '00';
-      document.getElementById('cd-seconds').textContent = '00';
-      clearInterval(countdownInterval);
-      return;
-    }
-    const days = Math.floor(diff / 86400); diff %= 86400;
-    const hours = Math.floor(diff / 3600); diff %= 3600;
-    const minutes = Math.floor(diff / 60);
-    const seconds = diff % 60;
     
-    const dEl = document.getElementById('cd-days');
-    const hEl = document.getElementById('cd-hours');
-    const mEl = document.getElementById('cd-minutes');
-    const sEl = document.getElementById('cd-seconds');
-    if (dEl) dEl.textContent = String(days).padStart(2, '0');
-    if (hEl) hEl.textContent = String(hours).padStart(2, '0');
-    if (mEl) mEl.textContent = String(minutes).padStart(2, '0');
-    if (sEl) sEl.textContent = String(seconds).padStart(2, '0');
+    if (closingTimestamp && now < closingTimestamp && isMarketOpen) {
+      // === MARKET OPEN: Show countdown to closing ===
+      let diff = closingTimestamp - now;
+      const days = Math.floor(diff / 86400); diff %= 86400;
+      const hours = Math.floor(diff / 3600); diff %= 3600;
+      const minutes = Math.floor(diff / 60);
+      const seconds = diff % 60;
+      
+      const closingDate = new Date(closingTimestamp * 1000);
+      const dateStr = closingDate.toLocaleDateString('pt-BR', { 
+        weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' 
+      });
+
+      container.innerHTML = `
+        <div class="card-header">
+          <div class="card-title">
+            <span class="market-pulse open"></span>
+            ⏱️ Fechamento do Mercado
+          </div>
+          <div style="font-size:13px;color:var(--text-secondary)">${dateStr}</div>
+        </div>
+        <div class="countdown">
+          <div class="countdown-block">
+            <span class="countdown-value">${String(days).padStart(2, '0')}</span>
+            <span class="countdown-label">Dias</span>
+          </div>
+          <span class="countdown-sep">:</span>
+          <div class="countdown-block">
+            <span class="countdown-value">${String(hours).padStart(2, '0')}</span>
+            <span class="countdown-label">Horas</span>
+          </div>
+          <span class="countdown-sep">:</span>
+          <div class="countdown-block">
+            <span class="countdown-value">${String(minutes).padStart(2, '0')}</span>
+            <span class="countdown-label">Min</span>
+          </div>
+          <span class="countdown-sep">:</span>
+          <div class="countdown-block">
+            <span class="countdown-value">${String(seconds).padStart(2, '0')}</span>
+            <span class="countdown-label">Seg</span>
+          </div>
+        </div>
+      `;
+    } else {
+      // === MARKET CLOSED: Show "MERCADO FECHADO" + time since closed ===
+      // Calculate time since market closed
+      let elapsed = 0;
+      if (closingTimestamp) {
+        elapsed = now - closingTimestamp;
+      }
+
+      // Estimate next opening (typically the day after last game, Monday ~12h)
+      // For now, show elapsed since closing
+      const elapsedHours = Math.floor(elapsed / 3600);
+      const elapsedMinutes = Math.floor((elapsed % 3600) / 60);
+      const elapsedSeconds = elapsed % 60;
+
+      const closingDate = closingTimestamp 
+        ? new Date(closingTimestamp * 1000).toLocaleDateString('pt-BR', { 
+            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' 
+          })
+        : '';
+
+      container.innerHTML = `
+        <div style="text-align:center;padding:8px 0">
+          <!-- MERCADO FECHADO Badge -->
+          <div class="market-closed-badge">
+            <span class="market-pulse closed"></span>
+            🔒 MERCADO FECHADO!
+          </div>
+          
+          ${closingDate ? `
+          <p style="color:var(--text-muted);font-size:12px;margin-top:8px">
+            Fechou em: ${closingDate}
+          </p>
+          ` : ''}
+
+          <!-- Time elapsed since closing -->
+          <div style="margin-top:16px">
+            <p style="color:var(--text-secondary);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">
+              ⏳ Tempo desde o fechamento
+            </p>
+            <div class="countdown">
+              <div class="countdown-block closed-block">
+                <span class="countdown-value closed-value">${String(elapsedHours).padStart(2, '0')}</span>
+                <span class="countdown-label">Horas</span>
+              </div>
+              <span class="countdown-sep">:</span>
+              <div class="countdown-block closed-block">
+                <span class="countdown-value closed-value">${String(elapsedMinutes).padStart(2, '0')}</span>
+                <span class="countdown-label">Min</span>
+              </div>
+              <span class="countdown-sep">:</span>
+              <div class="countdown-block closed-block">
+                <span class="countdown-value closed-value">${String(elapsedSeconds).padStart(2, '0')}</span>
+                <span class="countdown-label">Seg</span>
+              </div>
+            </div>
+          </div>
+
+          <p style="color:var(--text-muted);font-size:11px;margin-top:12px">
+            O mercado reabre após a última partida da rodada
+          </p>
+        </div>
+      `;
+    }
   }
 
   update();
