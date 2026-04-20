@@ -6,6 +6,7 @@ import { renderDashboard, destroyDashboard } from './views/dashboard.js';
 import { renderPlayers, destroyPlayers } from './views/players.js';
 import { renderTeams, destroyTeams } from './views/teams.js';
 import { renderCompare, destroyCompare } from './views/compare.js';
+import { renderPrevisao, destroyPrevisao } from './views/previsao.js';
 import { renderRecommendations, destroyRecommendations } from './views/recommendations.js';
 import { renderPlayerProfile, destroyPlayerProfile } from './views/player-profile.js';
 import { renderParciais, destroyParciais } from './views/parciais.js';
@@ -31,6 +32,12 @@ const VIEWS = {
     icon: '🏟️',
     render: renderTeams,
     destroy: destroyTeams,
+  },
+  previsao: {
+    title: 'Previsão de Gols',
+    icon: '🎯',
+    render: renderPrevisao,
+    destroy: destroyPrevisao,
   },
   compare: {
     title: 'Comparar',
