@@ -107,8 +107,8 @@ function getFilteredAthletes() {
 
   // Sort
   athletes.sort((a, b) => {
-    let va = a[currentSort.key];
-    let vb = b[currentSort.key];
+    let va = currentSort.key === 'mpv' ? a.preco_num * 0.25 : a[currentSort.key];
+    let vb = currentSort.key === 'mpv' ? b.preco_num * 0.25 : b[currentSort.key];
     if (typeof va === 'string') {
       va = va.toLowerCase();
       vb = vb.toLowerCase();
@@ -143,6 +143,7 @@ function updateTable() {
     { key: 'pontos_num', label: 'Pts', sortable: true },
     { key: 'media_num', label: 'Média', sortable: true },
     { key: 'preco_num', label: 'Preço', sortable: true },
+    { key: 'mpv', label: 'MPV', sortable: true },
     { key: 'variacao_num', label: 'Var.', sortable: true },
     { key: 'jogos_num', label: 'Jogos', sortable: true },
   ];
@@ -218,6 +219,7 @@ function renderPlayerRow(a) {
       <td><span class="${ptsClass}" style="font-weight:700">${a.pontos_num.toFixed(1)}</span></td>
       <td><span style="font-weight:700">${a.media_num.toFixed(2)}</span></td>
       <td style="font-weight:600">${formatPrice(a.preco_num)}</td>
+      <td style="font-weight:600;color:var(--accent-orange)">${(a.preco_num * 0.25).toFixed(2)}</td>
       <td><span class="${varClass}" style="font-weight:600">${formatVariation(a.variacao_num)}</span></td>
       <td style="text-align:center">${a.jogos_num}</td>
       <td style="white-space:nowrap">
@@ -228,7 +230,7 @@ function renderPlayerRow(a) {
     </tr>
     ${scoutEntries.length > 0 ? `
     <tr id="scout-${a.atleta_id}" style="display:none">
-      <td colspan="10" style="padding:8px 16px;background:rgba(0,0,0,0.2)">
+      <td colspan="11" style="padding:8px 16px;background:rgba(0,0,0,0.2)">
         <div class="scout-details">
           ${scoutEntries.map(([key, val]) => `
             <div class="scout-item">
