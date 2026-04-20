@@ -1657,3 +1657,17 @@ ul, ol { list-style: none; }
   display: none !important;
 }
 
+/* ===== SORTABLE TABLE HEADERS ===== */
+.sortable-th {
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.sortable-th:hover {
+  color: var(--accent-green) !important;
+  background: rgba(0, 230, 118, 0.05);
+}
+
+.sortable-th.active {
+  color: var(--accent-green) !important;
+}
+

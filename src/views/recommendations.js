@@ -6,6 +6,7 @@ import { calcPlayerStats, calcClubStats, analyzeConfronto } from '../stats.js';
 
 let currentTab = 'mitar';
 let currentPos = 0; // 0 = todos, 1-6 = posição específica
+let currentSort = { key: 'mitarScore', dir: 'desc' }; // sortable columns
 
 const TABS = [
   { id: 'mitar', label: '🔥 Mitar', desc: 'Jogadores com maior chance de pontuar alto na rodada' },
@@ -134,6 +135,47 @@ function renderTabContent() {
   }
 }
 
+// Sort helper
+function sortBy(arr, key, dir) {
+  return [...arr].sort((a, b) => {
+    let va = 0, vb = 0;
+    switch(key) {
+      case 'mitarScore': va = a.mitarScore || 0; vb = b.mitarScore || 0; break;
+      case 'media': va = a.media_num || 0; vb = b.media_num || 0; break;
+      case 'recentAvg': va = a.recentAvg || 0; vb = b.recentAvg || 0; break;
+      case 'preco': va = a.preco_num || 0; vb = b.preco_num || 0; break;
+      case 'consistencia': va = a.stats?.consistencia || 0; vb = b.stats?.consistencia || 0; break;
+      case 'trend': va = a.stats?.trend || 0; vb = b.stats?.trend || 0; break;
+      case 'jogos': va = a.jogos_num || 0; vb = b.jogos_num || 0; break;
+      case 'variacao': va = a.variacao_num || 0; vb = b.variacao_num || 0; break;
+      case 'ratio': va = a.ratio || 0; vb = b.ratio || 0; break;
+      case 'desvio': va = a.stats?.desvioPadrao || 0; vb = b.stats?.desvioPadrao || 0; break;
+      default: va = a.media_num || 0; vb = b.media_num || 0;
+    }
+    return dir === 'desc' ? vb - va : va - vb;
+  });
+}
+
+function sortHeader(label, key) {
+  const isActive = currentSort.key === key;
+  const arrow = isActive ? (currentSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
+  return `<th class="sortable-th ${isActive ? 'active' : ''}" data-sort="${key}" style="cursor:pointer;user-select:none;white-space:nowrap">${label}${arrow}</th>`;
+}
+
+function bindSortHeaders(tableId) {
+  document.querySelectorAll(`#${tableId} .sortable-th`).forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (currentSort.key === key) {
+        currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
+      } else {
+        currentSort = { key, dir: 'desc' };
+      }
+      renderTabContent();
+    });
+  });
+}
+
 // ============================
 // TAB: 🔥 MITAR
 // ============================
@@ -142,7 +184,7 @@ function renderMitar(body, data) {
   const probable = filterByPos(athletes.filter(a => a.status_id === 7 && a.jogos_num > 0));
 
   if (isHistoryLoaded()) {
-    const scored = probable.map(a => {
+    let scored = probable.map(a => {
       const stats = calcPlayerStats(a.atleta_id);
       if (!stats) return { ...a, mitarScore: a.media_num, recentAvg: a.media_num, stats: null };
 
@@ -152,18 +194,61 @@ function renderMitar(body, data) {
       const mitarScore = recentAvg * 0.5 + stats.media * 0.3 + trendBonus + consistBonus;
       
       return { ...a, mitarScore, recentAvg, stats };
-    }).sort((a, b) => b.mitarScore - a.mitarScore).slice(0, 20);
+    });
+
+    scored = sortBy(scored, currentSort.key, currentSort.dir).slice(0, 20);
 
     body.innerHTML = `
       <div class="card">
         <div class="card-header">
           <div class="card-title">🔥 Top para Mitar ${currentPos > 0 ? `— ${getPosLabel()}` : ''}</div>
-          <div class="card-subtitle">${scored.length} jogadores · Ordenados por score de mitagem</div>
+          <div class="card-subtitle">${scored.length} jogadores · Clique no cabeçalho para ordenar</div>
         </div>
-        ${scored.length > 0 ? scored.map((a, i) => renderMitarCard(a, i)).join('') 
-          : '<p style="color:var(--text-muted);text-align:center;padding:20px">Nenhum jogador encontrado nesta posição</p>'}
+        <div class="table-container">
+          <table class="data-table" id="mitar-table">
+            <thead><tr>
+              <th>#</th>
+              <th>Jogador</th>
+              <th>Pos</th>
+              ${sortHeader('Score', 'mitarScore')}
+              ${sortHeader('Média', 'media')}
+              ${sortHeader('Recente', 'recentAvg')}
+              ${sortHeader('Preço', 'preco')}
+              ${sortHeader('Consist.', 'consistencia')}
+              ${sortHeader('Trend', 'trend')}
+            </tr></thead>
+            <tbody>
+              ${scored.map((a, i) => {
+                const trend = a.stats?.trend > 0.5 ? '📈' : a.stats?.trend < -0.5 ? '📉' : '➡️';
+                const stars = a.stats ? '★'.repeat(a.stats.consistencia) + '☆'.repeat(5 - a.stats.consistencia) : '-';
+                return `
+                <tr>
+                  <td><span class="player-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <img src="${a.clubBadge}" alt="" class="club-badge" onerror="this.style.display='none'">
+                      <div>
+                        <span style="font-weight:600;cursor:pointer" onclick="window.__openPlayerProfile && window.__openPlayerProfile(${a.atleta_id}, '${a.apelido.replace(/'/g, "\\'")}')"
+                          onmouseover="this.style.color='var(--accent-green)'" onmouseout="this.style.color=''">${a.apelido}</span>
+                        <span style="font-size:10px;color:var(--text-muted);display:block">${a.clubName}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="position-badge ${a.position.class}">${a.position.abr}</span></td>
+                  <td style="font-weight:800;color:var(--accent-gold)">${a.mitarScore.toFixed(1)}</td>
+                  <td style="font-weight:700;color:var(--accent-green)">${a.media_num.toFixed(2)}</td>
+                  <td style="color:var(--accent-gold)">${a.recentAvg?.toFixed(1) || '-'}</td>
+                  <td>${formatPrice(a.preco_num)}</td>
+                  <td style="font-size:12px">${stars}</td>
+                  <td>${trend}</td>
+                </tr>`;
+              }).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:20px">Nenhum jogador encontrado</td></tr>'}
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
+    bindSortHeaders('mitar-table');
   } else {
     const byMedia = probable.sort((a, b) => b.media_num - a.media_num).slice(0, 15);
     body.innerHTML = `
