@@ -3,10 +3,10 @@ title Cartola FC Stats - Dev Server
 cd /d "c:\Users\pcp\Documents\CRTL"
 echo.
 echo  ==========================================
-echo   🏆 CARTOLA FC STATS - Iniciando servidor
+echo   CARTOLA FC STATS - Iniciando servidor
 echo  ==========================================
 echo.
-start "" "http://localhost:5173" 2>nul
-timeout /t 2 /nobreak >nul
+echo  Acesse: http://localhost:5173
+echo.
 call npm run dev
 pause

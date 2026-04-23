@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   server: {
-    open: true,
+    open: false,
     proxy: {
       '/api': {
         target: 'https://api.cartola.globo.com',
