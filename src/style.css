@@ -1746,3 +1746,29 @@ details summary::-webkit-details-marker {
   padding: 8px;
 }
 
+/* ===== PREVISÃO DE GOLS GRID ===== */
+.previsao-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.previsao-card {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.previsao-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 1200px) {
+  .previsao-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== VALUE WARNING (Casa/Fora) ===== */
+.value-warning {
+  color: var(--accent-orange);
+}

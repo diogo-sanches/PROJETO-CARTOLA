@@ -87,7 +87,7 @@ async function loadRound(round) {
     });
 
     // Stats summary
-    const finished = matches.filter(m => m.valida === true || m.periodo_tr === 'POS_JOGO').length;
+    const finished = matches.filter(m => m.placar_oficial_mandante != null && m.placar_oficial_visitante != null).length;
     const live = matches.filter(m => m.periodo_tr === 'JOGO' || m.status_transmissao_tr === 'EM_ANDAMENTO').length;
     const pending = matches.length - finished - live;
     const totalGoals = matches.reduce((s, m) => s + (m.placar_oficial_mandante || 0) + (m.placar_oficial_visitante || 0), 0);
@@ -160,7 +160,7 @@ async function loadRound(round) {
               const awayBadge = away?.escudos?.['45x45'] || away?.escudos?.['30x30'] || '';
               
               const isLive = m.periodo_tr === 'JOGO' || m.status_transmissao_tr === 'EM_ANDAMENTO';
-              const isFinished = m.valida === true || m.periodo_tr === 'POS_JOGO';
+              const isFinished = !isLive && m.placar_oficial_mandante != null && m.placar_oficial_visitante != null;
               const isPending = !isLive && !isFinished;
               
               const statusLabel = isLive ? '🔴 AO VIVO' : isFinished ? '✅ Encerrado' : '⏳ Aguardando';

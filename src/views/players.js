@@ -1,17 +1,24 @@
 // ===== PLAYERS VIEW =====
-import { getData, getPosition, getStatus, getScoutLabel, formatPrice, formatVariation } from '../api.js';
+import { getData, getPosition, getStatus, getScoutLabel, formatPrice, formatVariation, fetchMatchesByRound } from '../api.js';
+import { isHistoryLoaded, onHistoryLoaded, getClubMatches } from '../history.js';
+import { calcClubStats } from '../stats.js';
 
 let currentSort = { key: 'media_num', dir: 'desc' };
-let currentFilters = { position: '', club: '', status: '', search: '' };
+let currentFilters = { position: '', club: '', status: '', search: '', mando: '', sg: false };
 let currentPage = 1;
 const PAGE_SIZE = 25;
+let _matchDataMap = {}; // clubId -> { isHome, opponentName, opponentBadge }
+let _sgTeams = new Set(); // clubIds predicted to keep clean sheet
 
-export function renderPlayers(container) {
+export async function renderPlayers(container) {
   const data = getData();
   if (!data) return;
 
-  const { athletes, clubs } = data;
+  const { athletes, clubs, market } = data;
   const clubList = Object.values(clubs).sort((a, b) => a.nome_fantasia.localeCompare(b.nome_fantasia));
+
+  // Load current round matches to determine Casa/Fora
+  await loadMatchData(market.rodada_atual, clubs);
 
   container.innerHTML = `
     <div class="animate-in">
@@ -42,6 +49,15 @@ export function renderPlayers(container) {
           <option value="5">Contundido</option>
           <option value="6">Nulo</option>
         </select>
+        <select class="filter-select" id="filter-mando">
+          <option value="">Todos Mandos</option>
+          <option value="casa">🏠 Casa</option>
+          <option value="fora">✈️ Fora</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:0 8px;white-space:nowrap">
+          <input type="checkbox" id="filter-sg" style="accent-color:var(--accent-green)" />
+          🛡️ Provável SG
+        </label>
       </div>
 
       <!-- Results count -->
@@ -78,8 +94,118 @@ export function renderPlayers(container) {
     currentPage = 1;
     updateTable();
   });
+  document.getElementById('filter-mando').addEventListener('change', (e) => {
+    currentFilters.mando = e.target.value;
+    currentPage = 1;
+    updateTable();
+  });
+  document.getElementById('filter-sg').addEventListener('change', (e) => {
+    currentFilters.sg = e.target.checked;
+    currentPage = 1;
+    updateTable();
+  });
 
   updateTable();
+}
+
+async function loadMatchData(round, clubs) {
+  try {
+    const matchData = await fetchMatchesByRound(round);
+    const matches = matchData.partidas || [];
+    const matchClubs = matchData.clubes || {};
+    _matchDataMap = {};
+
+    for (const m of matches) {
+      const homeId = m.clube_casa_id;
+      const awayId = m.clube_visitante_id;
+      const homeClub = matchClubs[homeId] || clubs[homeId] || {};
+      const awayClub = matchClubs[awayId] || clubs[awayId] || {};
+
+      _matchDataMap[homeId] = {
+        isHome: true,
+        opponentName: awayClub.nome_fantasia || awayClub.nome || '???',
+        opponentBadge: awayClub.escudos?.['30x30'] || '',
+        opponentId: awayId,
+      };
+      _matchDataMap[awayId] = {
+        isHome: false,
+        opponentName: homeClub.nome_fantasia || homeClub.nome || '???',
+        opponentBadge: homeClub.escudos?.['30x30'] || '',
+        opponentId: homeId,
+      };
+    }
+  } catch (e) {
+    console.warn('Failed to load match data for players view:', e);
+    _matchDataMap = {};
+  }
+
+  // Compute SG predictions if history is loaded
+  computeSGTeams(clubs);
+  if (!isHistoryLoaded()) {
+    onHistoryLoaded(() => computeSGTeams(clubs));
+  }
+}
+
+function computeSGTeams(clubs) {
+  _sgTeams = new Set();
+  if (!isHistoryLoaded()) return;
+
+  const clubIds = Object.keys(clubs).map(Number);
+
+  // Compute league-wide home/away averages (same as previsao.js)
+  let lHomeGM = 0, lHomeGS = 0, lAwayGM = 0, lAwayGS = 0, lHG = 0, lAG = 0;
+  clubIds.forEach(id => {
+    const matches = getClubMatches(id);
+    if (!matches || matches.length === 0) return;
+    const home = matches.filter(m => m.isHome);
+    const away = matches.filter(m => !m.isHome);
+    lHomeGM += home.reduce((s, m) => s + m.goalsFor, 0);
+    lHomeGS += home.reduce((s, m) => s + m.goalsAgainst, 0);
+    lAwayGM += away.reduce((s, m) => s + m.goalsFor, 0);
+    lAwayGS += away.reduce((s, m) => s + m.goalsAgainst, 0);
+    lHG += home.length;
+    lAG += away.length;
+  });
+  const avgHGM = lHG > 0 ? lHomeGM / lHG : 1;
+  const avgHGS = lHG > 0 ? lHomeGS / lHG : 1;
+  const avgAGM = lAG > 0 ? lAwayGM / lAG : 1;
+  const avgAGS = lAG > 0 ? lAwayGS / lAG : 1;
+
+  // For each team, compute expected goals against (same formula as previsão)
+  Object.entries(_matchDataMap).forEach(([clubIdStr, info]) => {
+    const clubId = parseInt(clubIdStr);
+    const oppId = info.opponentId;
+
+    const myMatches = getClubMatches(clubId);
+    const oppMatches = getClubMatches(oppId);
+    if (!myMatches?.length || !oppMatches?.length) return;
+
+    const myHome = myMatches.filter(m => m.isHome);
+    const myAway = myMatches.filter(m => !m.isHome);
+    const oppHome = oppMatches.filter(m => m.isHome);
+    const oppAway = oppMatches.filter(m => !m.isHome);
+
+    let expGoalsAgainst;
+    if (info.isHome) {
+      // I'm home → opponent is away → their away attack vs my home defense
+      const oppAwayGM = oppAway.length > 0 ? oppAway.reduce((s, m) => s + m.goalsFor, 0) / oppAway.length : 0;
+      const myHomeGS = myHome.length > 0 ? myHome.reduce((s, m) => s + m.goalsAgainst, 0) / myHome.length : 0;
+      const oppAttack = oppAwayGM / Math.max(avgAGM, 0.3);
+      const myDefense = myHomeGS / Math.max(avgHGS, 0.3);
+      expGoalsAgainst = oppAttack * myDefense * avgAGM;
+    } else {
+      // I'm away → opponent is home → their home attack vs my away defense
+      const oppHomeGM = oppHome.length > 0 ? oppHome.reduce((s, m) => s + m.goalsFor, 0) / oppHome.length : 0;
+      const myAwayGS = myAway.length > 0 ? myAway.reduce((s, m) => s + m.goalsAgainst, 0) / myAway.length : 0;
+      const oppAttack = oppHomeGM / Math.max(avgHGM, 0.3);
+      const myDefense = myAwayGS / Math.max(avgAGS, 0.3);
+      expGoalsAgainst = oppAttack * myDefense * avgHGM;
+    }
+
+    if (Math.round(expGoalsAgainst) === 0) {
+      _sgTeams.add(clubId);
+    }
+  });
 }
 
 function getFilteredAthletes() {
@@ -103,6 +229,16 @@ function getFilteredAthletes() {
   }
   if (currentFilters.status) {
     athletes = athletes.filter(a => a.status_id === parseInt(currentFilters.status));
+  }
+  if (currentFilters.mando) {
+    athletes = athletes.filter(a => {
+      const matchInfo = _matchDataMap[a.clube_id];
+      if (!matchInfo) return false;
+      return currentFilters.mando === 'casa' ? matchInfo.isHome : !matchInfo.isHome;
+    });
+  }
+  if (currentFilters.sg) {
+    athletes = athletes.filter(a => _sgTeams.has(a.clube_id) && a.status_id === 7 && [1, 2, 3].includes(a.posicao_id));
   }
 
   // Sort
@@ -139,6 +275,8 @@ function updateTable() {
     { key: 'apelido', label: 'Jogador', sortable: true },
     { key: 'posicao_id', label: 'Pos', sortable: true },
     { key: 'clube_id', label: 'Time', sortable: false },
+    { key: '_mando', label: 'Mando', sortable: false },
+    { key: '_adversario', label: 'Adversário', sortable: false },
     { key: 'status_id', label: 'Status', sortable: true },
     { key: 'pontos_num', label: 'Pts', sortable: true },
     { key: 'media_num', label: 'Média', sortable: true },
@@ -195,6 +333,11 @@ function renderPlayerRow(a) {
   const ptsClass = a.pontos_num > 0 ? 'value-positive' : a.pontos_num < 0 ? 'value-negative' : 'value-neutral';
 
   const scoutEntries = Object.entries(a.scout || {});
+  const matchInfo = _matchDataMap[a.clube_id];
+  const mandoLabel = matchInfo ? (matchInfo.isHome ? '🏠 Casa' : '✈️ Fora') : '—';
+  const mandoClass = matchInfo ? (matchInfo.isHome ? 'value-positive' : 'value-warning') : '';
+  const adversario = matchInfo ? matchInfo.opponentName : '—';
+  const advBadge = matchInfo?.opponentBadge || '';
 
   return `
     <tr>
@@ -215,6 +358,13 @@ function renderPlayerRow(a) {
           <span style="font-size:12px">${a.clubName}</span>
         </div>
       </td>
+      <td><span style="font-size:11px;font-weight:600;white-space:nowrap" class="${mandoClass}">${mandoLabel}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:4px">
+          ${advBadge ? `<img src="${advBadge}" alt="" class="club-badge" style="width:18px;height:18px" onerror="this.style.display='none'">` : ''}
+          <span style="font-size:11px">${adversario}</span>
+        </div>
+      </td>
       <td><span class="status-badge ${a.status.class}">${a.status.icon} ${a.status.nome}</span></td>
       <td><span class="${ptsClass}" style="font-weight:700">${a.pontos_num.toFixed(1)}</span></td>
       <td><span style="font-weight:700">${a.media_num.toFixed(2)}</span></td>
@@ -230,7 +380,7 @@ function renderPlayerRow(a) {
     </tr>
     ${scoutEntries.length > 0 ? `
     <tr id="scout-${a.atleta_id}" style="display:none">
-      <td colspan="11" style="padding:8px 16px;background:rgba(0,0,0,0.2)">
+      <td colspan="13" style="padding:8px 16px;background:rgba(0,0,0,0.2)">
         <div class="scout-details">
           ${scoutEntries.map(([key, val]) => `
             <div class="scout-item">

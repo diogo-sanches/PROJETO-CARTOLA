@@ -27,15 +27,11 @@ export async function renderParciais(container) {
           <button class="pos-btn" data-posfilter="5">⚽ ATA</button>
           <button class="pos-btn" data-posfilter="6">📋 TEC</button>
         </div>
-      </div>
 
-      <!-- Scout Legend -->
-      <div class="card" style="margin-bottom:20px;padding:14px">
-        <details>
-          <summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--text-secondary);user-select:none">
-            📖 Legenda dos Scouts <span style="font-size:10px;color:var(--text-muted)">(clique para expandir)</span>
-          </summary>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:6px;margin-top:12px">
+        <!-- Scout Legend (inline) -->
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-color)">
+          <div style="font-weight:700;font-size:12px;color:var(--text-secondary);margin-bottom:8px">📖 Legenda dos Scouts</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:6px">
             <div class="scout-legend-item"><span class="scout-icon positive">⚽</span><span><strong>G</strong> — Gol</span><span class="scout-pts positive">+8.0</span></div>
             <div class="scout-legend-item"><span class="scout-icon positive">🅰️</span><span><strong>A</strong> — Assistência</span><span class="scout-pts positive">+5.0</span></div>
             <div class="scout-legend-item"><span class="scout-icon positive">🧤</span><span><strong>SG</strong> — Jogo Sem Gol</span><span class="scout-pts positive">+5.0</span></div>
@@ -55,7 +51,7 @@ export async function renderParciais(container) {
             <div class="scout-legend-item"><span class="scout-icon neutral">🪵</span><span><strong>FT</strong> — Final. na Trave</span><span class="scout-pts neutral">+3.0</span></div>
             <div class="scout-legend-item"><span class="scout-icon neutral">🏳️‍⬛</span><span><strong>I</strong> — Impedimento</span><span class="scout-pts negative">-0.1</span></div>
           </div>
-        </details>
+        </div>
       </div>
 
       <!-- Scored Players Table -->

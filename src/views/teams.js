@@ -9,6 +9,8 @@ Chart.register(DoughnutController, ArcElement, BarController, BarElement, Catego
 let selectedClub = null;
 let chartInstance = null;
 let goalsChart = null;
+let classSort = { key: 'pts', dir: 'desc' };
+let _classData = [];
 
 export function renderTeams(container) {
   const data = getData();
@@ -19,24 +21,26 @@ export function renderTeams(container) {
   const hasHistory = isHistoryLoaded();
 
   // Build classification
-  let classData = [];
   if (hasHistory) {
-    classData = clubList.map(c => {
+    _classData = clubList.map(c => {
       const stats = calcClubStats(c.id);
       if (!stats) return { ...c, pts: 0, v: 0, e: 0, d: 0, gm: 0, gs: 0, sg: 0, jogos: 0, forma: [], aprov: 0 };
       return {
         ...c,
         pts: stats.vitorias * 3 + stats.empates,
         v: stats.vitorias, e: stats.empates, d: stats.derrotas,
-        gm: stats.golsMarcados, gs: stats.golsSofridos,
-        sg: stats.golsMarcados - stats.golsSofridos,
+        gm: stats.gmTotal, gs: stats.gsTotal,
+        sg: stats.gmTotal - stats.gsTotal,
         jogos: stats.jogos, forma: stats.forma || [], aprov: stats.aproveitamento || 0,
       };
-    }).sort((a, b) => b.pts - a.pts || b.sg - a.sg || b.gm - a.gm);
+    });
   } else {
-    classData = clubList.map(c => ({ ...c, pts: 0, v: 0, e: 0, d: 0, gm: 0, gs: 0, sg: 0, jogos: 0, forma: [], aprov: 0 }))
-      .sort((a, b) => a.nome_fantasia.localeCompare(b.nome_fantasia));
+    _classData = clubList.map(c => ({ ...c, pts: 0, v: 0, e: 0, d: 0, gm: 0, gs: 0, sg: 0, jogos: 0, forma: [], aprov: 0 }));
   }
+
+  // Sort the classification
+  sortClassData();
+  const classData = _classData;
 
   container.innerHTML = `
     <div class="animate-in">
@@ -51,8 +55,39 @@ export function renderTeams(container) {
               <tr>
                 <th style="width:30px">#</th>
                 <th style="width:36px"></th>
-                <th>Time</th>
-                ${hasHistory ? '<th>Pts</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GM</th><th>GS</th><th>SG</th><th>%Ap</th><th>Forma</th>' : ''}
+                <th style="cursor:pointer" onclick="window.__sortClass('nome_fantasia')">
+                  Time ${classSort.key === 'nome_fantasia' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                </th>
+                ${hasHistory ? `
+                  <th style="cursor:pointer" onclick="window.__sortClass('pts')">
+                    Pts ${classSort.key === 'pts' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th style="cursor:pointer" onclick="window.__sortClass('jogos')">
+                    J ${classSort.key === 'jogos' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th style="cursor:pointer" onclick="window.__sortClass('v')">
+                    V ${classSort.key === 'v' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th style="cursor:pointer" onclick="window.__sortClass('e')">
+                    E ${classSort.key === 'e' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th style="cursor:pointer" onclick="window.__sortClass('d')">
+                    D ${classSort.key === 'd' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th style="cursor:pointer" onclick="window.__sortClass('gm')">
+                    GM ${classSort.key === 'gm' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th style="cursor:pointer" onclick="window.__sortClass('gs')">
+                    GS ${classSort.key === 'gs' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th style="cursor:pointer" onclick="window.__sortClass('sg')">
+                    SG ${classSort.key === 'sg' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th style="cursor:pointer" onclick="window.__sortClass('aprov')">
+                    %Ap ${classSort.key === 'aprov' ? `<span class="sort-arrow">${classSort.dir === 'asc' ? '↑' : '↓'}</span>` : '<span class="sort-arrow">↕</span>'}
+                  </th>
+                  <th>Forma</th>
+                ` : ''}
               </tr>
             </thead>
             <tbody>
@@ -125,9 +160,34 @@ export function renderTeams(container) {
     document.getElementById('team-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  window.__sortClass = (key) => {
+    if (classSort.key === key) {
+      classSort.dir = classSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      classSort.key = key;
+      classSort.dir = key === 'nome_fantasia' ? 'asc' : 'desc';
+    }
+    renderTeams(container);
+  };
+
   if (!hasHistory) {
     onHistoryLoaded(() => renderTeams(container));
   }
+}
+
+function sortClassData() {
+  const key = classSort.key;
+  const dir = classSort.dir;
+  _classData.sort((a, b) => {
+    let va = a[key], vb = b[key];
+    if (typeof va === 'string') {
+      va = va.toLowerCase();
+      vb = vb.toLowerCase();
+      return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    if (dir === 'asc') return va - vb;
+    return vb - va;
+  });
 }
 
 function renderTeamDetails(clubId) {
@@ -349,4 +409,5 @@ export function destroyTeams() {
   if (goalsChart) { goalsChart.destroy(); goalsChart = null; }
   selectedClub = null;
   delete window.__selectClub;
+  delete window.__sortClass;
 }

@@ -1,18 +1,70 @@
 // ===== RECOMMENDATIONS VIEW =====
 // Strategy tabs + Position submenu on ALL tabs
-import { getData, getClubAthletes, formatPrice, formatVariation } from '../api.js';
-import { isHistoryLoaded, onHistoryLoaded } from '../history.js';
+import { getData, getClubAthletes, formatPrice, formatVariation, fetchMatchesByRound } from '../api.js';
+import { isHistoryLoaded, onHistoryLoaded, getClubMatches } from '../history.js';
 import { calcPlayerStats, calcClubStats, analyzeConfronto } from '../stats.js';
+
+let _matchContext = {}; // clubId -> { isHome, opponentId, opponentName, opponentStrength }
+let _matchContextLoaded = false;
+
+async function loadMatchContext() {
+  if (_matchContextLoaded) return;
+  try {
+    const data = getData();
+    if (!data) return;
+    const round = data.market.rodada_atual;
+    const matchData = await fetchMatchesByRound(round);
+    const matches = matchData.partidas || [];
+    const clubsMap = matchData.clubes || {};
+
+    // Build strength map from league standings
+    const strengthMap = {};
+    if (isHistoryLoaded()) {
+      const clubIds = Object.keys(data.clubs).map(Number);
+      const standings = clubIds.map(id => {
+        const stats = calcClubStats(id);
+        return { id, aprov: stats?.aproveitamento || 0 };
+      }).sort((a, b) => b.aprov - a.aprov);
+      const maxAprov = standings[0]?.aprov || 100;
+      standings.forEach(s => { strengthMap[s.id] = maxAprov > 0 ? s.aprov / maxAprov : 0; });
+    }
+
+    _matchContext = {};
+    matches.forEach(m => {
+      const homeId = m.clube_casa_id;
+      const awayId = m.clube_visitante_id;
+      const homeName = clubsMap[homeId]?.nome_fantasia || '?';
+      const awayName = clubsMap[awayId]?.nome_fantasia || '?';
+
+      _matchContext[homeId] = {
+        isHome: true,
+        opponentId: awayId,
+        opponentName: awayName,
+        opponentStrength: strengthMap[awayId] || 0.5,
+      };
+      _matchContext[awayId] = {
+        isHome: false,
+        opponentId: homeId,
+        opponentName: homeName,
+        opponentStrength: strengthMap[homeId] || 0.5,
+      };
+    });
+    _matchContextLoaded = true;
+  } catch (e) {
+    console.warn('Could not load match context for recommendations:', e);
+  }
+}
 
 let currentTab = 'mitar';
 let currentPos = 0; // 0 = todos, 1-6 = posição específica
 let currentSort = { key: 'mitarScore', dir: 'desc' }; // sortable columns
 
 const TABS = [
-  { id: 'mitar', label: '🔥 Mitar', desc: 'Jogadores com maior chance de pontuar alto na rodada' },
+  { id: 'mitar', label: '🔥 Mitar', desc: 'Alta média + consistência + contexto favorável (Liga Clássica)' },
+  { id: 'tirocurto', label: '🎯 Tiro Curto', desc: 'Potencial explosivo + baixa escalação (Liga de Rodada Única)' },
+  { id: 'ferrolho', label: '🔒 Ferrolho', desc: 'Defesa completa de 1 time com alta chance de SG' },
   { id: 'valorizar', label: '📈 Valorizar', desc: 'Jogadores baratos com potencial de valorização' },
   { id: 'custo', label: '💰 Custo-Benefício', desc: 'Melhor rendimento por preço por posição' },
-  { id: 'perolas', label: '💎 Pérolas', desc: 'Descobertas baratas com boa média' },
   { id: 'consistentes', label: '🎯 Consistentes', desc: 'Jogadores regulares, sem dente de serra' },
   { id: 'evitar', label: '⛔ Evitar', desc: 'Lesionados, suspensos e em queda' },
 ];
@@ -82,7 +134,7 @@ export function renderRecommendations(container) {
     });
   });
 
-  renderTabContent();
+  loadMatchContext().then(() => renderTabContent());
 }
 
 // Filter athletes by selected position
@@ -113,7 +165,7 @@ function renderTabContent() {
         <p style="color:var(--text-secondary);font-size:13px">${tab.desc}</p>
       </div>
       <div id="rec-tab-body">
-        ${!isHistoryLoaded() && ['mitar', 'consistentes'].includes(currentTab) ? `
+        ${!isHistoryLoaded() && ['mitar', 'tirocurto', 'ferrolho', 'consistentes'].includes(currentTab) ? `
           <div class="card" style="text-align:center;padding:30px">
             <div class="loading-spinner" style="margin:0 auto 12px"></div>
             <p style="color:var(--text-secondary);font-size:13px">Carregando dados históricos para análise avançada...</p>
@@ -127,9 +179,10 @@ function renderTabContent() {
 
   switch (currentTab) {
     case 'mitar': renderMitar(body, data); break;
+    case 'tirocurto': renderTiroCurto(body, data); break;
+    case 'ferrolho': renderFerrolho(body, data); break;
     case 'valorizar': renderValorizar(body, data); break;
     case 'custo': renderCustoBeneficio(body, data); break;
-    case 'perolas': renderPerolas(body, data); break;
     case 'consistentes': renderConsistentes(body, data); break;
     case 'evitar': renderEvitar(body, data); break;
   }
@@ -150,6 +203,7 @@ function sortBy(arr, key, dir) {
       case 'variacao': va = a.variacao_num || 0; vb = b.variacao_num || 0; break;
       case 'ratio': va = a.ratio || 0; vb = b.ratio || 0; break;
       case 'desvio': va = a.stats?.desvioPadrao || 0; vb = b.stats?.desvioPadrao || 0; break;
+      case 'tiroScore': va = a.tiroScore || 0; vb = b.tiroScore || 0; break;
       default: va = a.media_num || 0; vb = b.media_num || 0;
     }
     return dir === 'desc' ? vb - va : va - vb;
@@ -177,7 +231,7 @@ function bindSortHeaders(tableId) {
 }
 
 // ============================
-// TAB: 🔥 MITAR
+// TAB: 🔥 MITAR (Liga Clássica — Consistência)
 // ============================
 function renderMitar(body, data) {
   const { athletes } = data;
@@ -186,14 +240,39 @@ function renderMitar(body, data) {
   if (isHistoryLoaded()) {
     let scored = probable.map(a => {
       const stats = calcPlayerStats(a.atleta_id);
-      if (!stats) return { ...a, mitarScore: a.media_num, recentAvg: a.media_num, stats: null };
+      if (!stats) return { ...a, mitarScore: a.media_num, recentAvg: a.media_num, stats: null, matchBonus: 0 };
 
       const recentAvg = stats.history.slice(-3).reduce((s, h) => s + h.pontuacao, 0) / Math.max(stats.history.slice(-3).length, 1);
-      const trendBonus = stats.trend > 0 ? stats.trend * 2 : 0;
-      const consistBonus = stats.consistencia >= 4 ? 1 : stats.consistencia >= 3 ? 0.5 : 0;
-      const mitarScore = recentAvg * 0.5 + stats.media * 0.3 + trendBonus + consistBonus;
       
-      return { ...a, mitarScore, recentAvg, stats };
+      // CONSISTENCY-FOCUSED SCORING (Liga Clássica)
+      // 1. Overall média (35%) — the backbone
+      const mediaScore = stats.media * 0.35;
+      
+      // 2. Consistency (25%) — low variance = reliable
+      const consistScore = (stats.consistencia >= 4 ? 3 : stats.consistencia >= 3 ? 2 : stats.consistencia >= 2 ? 1 : 0) * 0.25;
+      
+      // 3. Match context (20%) — favorable game
+      let matchBonus = 0;
+      const ctx = _matchContext[a.clube_id];
+      if (ctx) {
+        matchBonus += ctx.isHome ? 1.0 : -0.3;
+        matchBonus += (0.5 - ctx.opponentStrength) * 2;
+        if ([1, 2, 3].includes(a.posicao_id) && !ctx.isHome && ctx.opponentStrength > 0.6) {
+          matchBonus -= 1.0;
+        }
+      }
+      const contextScore = matchBonus * 0.20;
+      
+      // 4. Trend (10%) — rising form
+      const trendScore = (stats.trend > 0 ? stats.trend * 1.5 : stats.trend * 0.5) * 0.10;
+      
+      // 5. Price protection (10%) — penalize very expensive players that might devalue
+      const priceRisk = a.preco_num > 15 ? -0.5 : a.preco_num > 10 ? 0 : 0.5;
+      const priceScore = priceRisk * 0.10;
+
+      const mitarScore = mediaScore + consistScore + contextScore + trendScore + priceScore;
+      
+      return { ...a, mitarScore, recentAvg, stats, matchBonus };
     });
 
     scored = sortBy(scored, currentSort.key, currentSort.dir).slice(0, 20);
@@ -287,6 +366,236 @@ function renderMitarCard(a, idx) {
 }
 
 // ============================
+// TAB: 🎯 TIRO CURTO (Liga de Rodada Única)
+// ============================
+function renderTiroCurto(body, data) {
+  const { athletes, market } = data;
+  const probable = filterByPos(athletes.filter(a => a.status_id === 7 && a.jogos_num > 0));
+
+  if (isHistoryLoaded()) {
+    let scored = probable.map(a => {
+      const stats = calcPlayerStats(a.atleta_id);
+      if (!stats) return { ...a, tiroScore: 0, stats: null, bestScore: 0, escalacao: 0 };
+
+      // 1. Ceiling (30%) — best performance ever (explosive potential)
+      const bestScore = stats.history.length > 0 ? Math.max(...stats.history.map(h => h.pontuacao)) : 0;
+      const ceilingScore = (bestScore / 20) * 0.30; // normalize: 20pts = max realistic
+
+      // 2. Recent high (25%) — recent explosive rounds
+      const recent = stats.history.slice(-5);
+      const recentBest = recent.length > 0 ? Math.max(...recent.map(h => h.pontuacao)) : 0;
+      const recentScore = (recentBest / 20) * 0.25;
+
+      // 3. Low ownership = differential (20%)
+      // Use escalacao percentage (lower = better for tiro curto)
+      const escalacao = a.escalacao_num || 0; // percentage of users who picked
+      const diffScore = Math.max(0, (20 - escalacao) / 20) * 0.20; // max at 0%, zero at 20%+
+
+      // 4. Favorable matchup (15%)
+      let matchupScore = 0;
+      const ctx = _matchContext[a.clube_id];
+      if (ctx) {
+        matchupScore = ((1 - ctx.opponentStrength) + (ctx.isHome ? 0.3 : 0)) * 0.15;
+      }
+
+      // 5. Offensive scouts (10%) — players who get goals/assists
+      const offensiveRounds = stats.history.filter(h => h.pontuacao > 8).length;
+      const offScore = (offensiveRounds / Math.max(stats.history.length, 1)) * 0.10;
+
+      const tiroScore = ceilingScore + recentScore + diffScore + matchupScore + offScore;
+
+      return { ...a, tiroScore, stats, bestScore, escalacao, recentBest };
+    });
+
+    scored = sortBy(scored, currentSort.key === 'mitarScore' ? 'tiroScore' : currentSort.key, currentSort.dir).slice(0, 20);
+
+    body.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🎯 Top Tiro Curto ${currentPos > 0 ? `— ${getPosLabel()}` : ''}</div>
+          <div class="card-subtitle">${scored.length} jogadores · Potencial explosivo + baixa escalação</div>
+        </div>
+        <div class="table-container">
+          <table class="data-table" id="tiro-table">
+            <thead><tr>
+              <th>#</th>
+              <th>Jogador</th>
+              <th>Pos</th>
+              ${sortHeader('Score', 'tiroScore')}
+              ${sortHeader('Melhor', 'bestScore')}
+              ${sortHeader('Média', 'media')}
+              ${sortHeader('Preço', 'preco')}
+              <th>Escal.%</th>
+              <th>Contexto</th>
+            </tr></thead>
+            <tbody>
+              ${scored.map((a, i) => {
+                const ctx = _matchContext[a.clube_id];
+                const mandoTag = ctx ? (ctx.isHome ? '🏠' : '✈️') : '';
+                const escalPct = (a.escalacao || 0).toFixed(1);
+                const escalColor = a.escalacao < 5 ? 'var(--accent-green)' : a.escalacao < 15 ? 'var(--accent-orange)' : 'var(--accent-red)';
+                return `
+                <tr>
+                  <td><span class="player-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <img src="${a.clubBadge}" alt="" class="club-badge" onerror="this.style.display='none'">
+                      <div>
+                        <span style="font-weight:600">${a.apelido}</span>
+                        <span style="font-size:10px;color:var(--text-muted);display:block">${a.clubName}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="position-badge ${a.position.class}">${a.position.abr}</span></td>
+                  <td style="font-weight:800;color:var(--accent-gold)">${a.tiroScore.toFixed(2)}</td>
+                  <td style="color:var(--accent-green);font-weight:700">${a.bestScore.toFixed(1)}</td>
+                  <td>${a.media_num.toFixed(2)}</td>
+                  <td>${formatPrice(a.preco_num)}</td>
+                  <td style="color:${escalColor};font-weight:600">${escalPct}%</td>
+                  <td>${mandoTag} ${ctx ? 'vs ' + ctx.opponentName : ''}</td>
+                </tr>`;
+              }).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:20px">Nenhum jogador encontrado</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    bindSortHeaders('tiro-table');
+  } else {
+    body.innerHTML = `<div class="card" style="text-align:center;padding:30px"><p style="color:var(--text-muted)">Aguardando dados históricos...</p></div>`;
+    onHistoryLoaded(() => { if (currentTab === 'tirocurto') renderTabContent(); });
+  }
+}
+
+// ============================
+// TAB: 🔒 FERROLHO (Defesa completa de 1 time)
+// ============================
+function renderFerrolho(body, data) {
+  const { athletes, clubs, market } = data;
+
+  if (!isHistoryLoaded()) {
+    body.innerHTML = `<div class="card" style="text-align:center;padding:30px"><p style="color:var(--text-muted)">Aguardando dados históricos...</p></div>`;
+    onHistoryLoaded(() => { if (currentTab === 'ferrolho') renderTabContent(); });
+    return;
+  }
+
+  // Compute league home/away averages for Dixon-Coles
+  const clubIds = Object.keys(clubs).map(Number);
+  let lHGM=0,lHGS=0,lAGM=0,lAGS=0,lHG=0,lAG=0;
+  clubIds.forEach(id => {
+    const m = getClubMatches(id); if (!m?.length) return;
+    const h=m.filter(x=>x.isHome), a=m.filter(x=>!x.isHome);
+    lHGM+=h.reduce((s,x)=>s+x.goalsFor,0); lHGS+=h.reduce((s,x)=>s+x.goalsAgainst,0);
+    lAGM+=a.reduce((s,x)=>s+x.goalsFor,0); lAGS+=a.reduce((s,x)=>s+x.goalsAgainst,0);
+    lHG+=h.length; lAG+=a.length;
+  });
+  const aHGM=lHG>0?lHGM/lHG:1, aHGS=lHG>0?lHGS/lHG:1;
+  const aAGM=lAG>0?lAGM/lAG:1, aAGS=lAG>0?lAGS/lAG:1;
+
+  // Calculate SG probability for each team this round
+  const teamSG = [];
+  Object.entries(_matchContext).forEach(([clubIdStr, ctx]) => {
+    const clubId = parseInt(clubIdStr);
+    const oppId = ctx.opponentId;
+    const myMatches = getClubMatches(clubId);
+    const oppMatches = getClubMatches(oppId);
+    if (!myMatches?.length || !oppMatches?.length) return;
+
+    const myHome = myMatches.filter(m => m.isHome);
+    const myAway = myMatches.filter(m => !m.isHome);
+    const oppHome = oppMatches.filter(m => m.isHome);
+    const oppAway = oppMatches.filter(m => !m.isHome);
+
+    let expGoalsAgainst;
+    if (ctx.isHome) {
+      const oppAGM = oppAway.length>0 ? oppAway.reduce((s,m)=>s+m.goalsFor,0)/oppAway.length : 0;
+      const myHGS = myHome.length>0 ? myHome.reduce((s,m)=>s+m.goalsAgainst,0)/myHome.length : 0;
+      expGoalsAgainst = (oppAGM/Math.max(aAGM,0.3)) * (myHGS/Math.max(aHGS,0.3)) * aAGM;
+    } else {
+      const oppHGM = oppHome.length>0 ? oppHome.reduce((s,m)=>s+m.goalsFor,0)/oppHome.length : 0;
+      const myAGS = myAway.length>0 ? myAway.reduce((s,m)=>s+m.goalsAgainst,0)/myAway.length : 0;
+      expGoalsAgainst = (oppHGM/Math.max(aHGM,0.3)) * (myAGS/Math.max(aAGS,0.3)) * aHGM;
+    }
+
+    // SG probability estimate (Poisson P(0) = e^(-lambda))
+    const pSG = Math.exp(-expGoalsAgainst);
+
+    // Recent SG form (last 5 matches in the relevant context)
+    const relevantMatches = ctx.isHome ? myHome.slice(-5) : myAway.slice(-5);
+    const recentSGs = relevantMatches.filter(m => m.goalsAgainst === 0).length;
+
+    // Count available defenders (status = Provável)
+    const defenders = athletes.filter(a => a.clube_id === clubId && a.status_id === 7 && [1, 2, 3].includes(a.posicao_id));
+    const clubName = clubs[clubId]?.nome_fantasia || '?';
+    const clubBadge = clubs[clubId]?.escudos?.['30x30'] || '';
+
+    teamSG.push({
+      clubId, clubName, clubBadge, ctx,
+      expGoalsAgainst, pSG, recentSGs,
+      relevantGames: relevantMatches.length,
+      defenders,
+      defenderCount: defenders.length,
+    });
+  });
+
+  teamSG.sort((a, b) => b.pSG - a.pSG);
+
+  body.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">🔒 Ranking de Ferrolho</div>
+        <div class="card-subtitle">Times ordenados por probabilidade de SG · Baseado no modelo Dixon-Coles</div>
+      </div>
+      <div class="card-subtitle" style="font-size:11px;color:var(--text-muted);margin-top:8px">
+        Estratégia: Escalar GOL + LAT + ZAG do mesmo time para multiplicar SG (5pts cada)
+      </div>
+    </div>
+    ${teamSG.slice(0, 10).map((t, i) => {
+      const pctSG = (t.pSG * 100).toFixed(0);
+      const barColor = t.pSG > 0.5 ? 'var(--accent-green)' : t.pSG > 0.3 ? 'var(--accent-orange)' : 'var(--accent-red)';
+      const mandoIcon = t.ctx.isHome ? '🏠 Casa' : '✈️ Fora';
+      return `
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap">
+            <span style="font-size:20px;font-weight:800;color:var(--text-muted);min-width:30px">#${i + 1}</span>
+            <img src="${t.clubBadge}" alt="" style="width:32px;height:32px" onerror="this.style.display='none'">
+            <div>
+              <div style="font-weight:700;font-size:16px">${t.clubName}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${mandoIcon} vs ${t.ctx.opponentName}</div>
+            </div>
+            <div style="margin-left:auto;text-align:right">
+              <div style="font-size:24px;font-weight:800;color:${barColor}">${pctSG}%</div>
+              <div style="font-size:10px;color:var(--text-muted)">Prob. SG</div>
+            </div>
+          </div>
+          <div style="background:var(--bg-tertiary);border-radius:6px;height:8px;overflow:hidden;margin-bottom:12px">
+            <div style="width:${pctSG}%;height:100%;background:${barColor};border-radius:6px;transition:width 0.3s"></div>
+          </div>
+          <div style="display:flex;gap:16px;font-size:12px;color:var(--text-secondary);margin-bottom:12px;flex-wrap:wrap">
+            <span>📊 Gols esperados contra: <b style="color:var(--accent-gold)">${t.expGoalsAgainst.toFixed(2)}</b></span>
+            <span>🛡️ SG recentes: <b>${t.recentSGs}/${t.relevantGames}</b></span>
+            <span>👥 Defensores disponíveis: <b style="color:${t.defenderCount >= 4 ? 'var(--accent-green)' : 'var(--accent-orange)'}">${t.defenderCount}</b></span>
+          </div>
+          ${t.defenderCount > 0 ? `
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${t.defenders.map(d => {
+              const pos = { 1: { abr: 'GOL', cls: 'gol' }, 2: { abr: 'LAT', cls: 'lat' }, 3: { abr: 'ZAG', cls: 'zag' } }[d.posicao_id] || { abr: '?', cls: '' };
+              return `<div style="background:var(--bg-tertiary);border-radius:8px;padding:6px 10px;font-size:11px;display:flex;align-items:center;gap:6px">
+                <span class="position-badge ${pos.cls}" style="font-size:9px;padding:1px 4px">${pos.abr}</span>
+                <span style="font-weight:600">${d.apelido}</span>
+                <span style="color:var(--text-muted)">Média ${d.media_num.toFixed(1)}</span>
+                <span style="color:var(--accent-green)">${formatPrice(d.preco_num)}</span>
+              </div>`;
+            }).join('')}
+          </div>
+          ` : '<p style="color:var(--text-muted);font-size:12px">Sem defensores disponíveis (Provável)</p>'}
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+// ============================
 // TAB: 📈 VALORIZAR
 // ============================
 function renderValorizar(body, data) {
@@ -297,7 +606,13 @@ function renderValorizar(body, data) {
     .map(a => {
       const mpv = a.preco_num * 0.25;
       const margem = a.media_num - mpv;
-      return { ...a, mpv, margem };
+      // Factor in last-round devaluation: recently devalued players are buying opportunities
+      const devalBonus = a.variacao_num < -0.5 ? Math.abs(a.variacao_num) * 0.5 : 0;
+      // Match context: home players are more likely to score well and valorize
+      const ctx = _matchContext[a.clube_id];
+      const homeBonus = ctx?.isHome ? 0.5 : 0;
+      const adjustedMargem = margem + devalBonus + homeBonus;
+      return { ...a, mpv, margem: adjustedMargem, rawMargem: margem, devalBonus };
     })
     .filter(a => a.margem > 0 && a.preco_num <= 15)
     .sort((a, b) => b.margem - a.margem);

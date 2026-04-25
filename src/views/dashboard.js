@@ -59,7 +59,11 @@ export function renderDashboard(container) {
         <div class="stat-card-info">
           <h3>Times Escalados</h3>
           <div class="stat-value">${(market.times_escalados || 0).toLocaleString('pt-BR')}</div>
-          <div class="stat-detail">na última rodada</div>
+          <div class="stat-detail">
+            Rodada ${currentRound} · ${market.status_mercado === 1
+              ? '<span style="color:var(--accent-green)">Mercado Aberto</span>'
+              : '<span style="color:var(--accent-red)">Mercado Fechado</span>'}
+          </div>
         </div>
       </div>
     </div>
@@ -120,7 +124,6 @@ export function renderDashboard(container) {
   // Load top points from previous round
   loadTopPoints(prevRound);
 }
-
 async function loadTopPoints(round) {
   const container = document.getElementById('top-points-list');
   if (!container) return;
