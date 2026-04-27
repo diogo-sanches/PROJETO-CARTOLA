@@ -1,10 +1,11 @@
 // ===== MAIS ESCALADOS VIEW =====
-import { getData, formatPrice, formatVariation, getPosition, fetchScoredByRound, fetchScored } from '../api.js';
+import { getData, formatPrice, formatVariation, getPosition, fetchScoredByRound, fetchScored, fetchMaisEscalados } from '../api.js';
 import { isHistoryLoaded, onHistoryLoaded, getRoundScored } from '../history.js';
 import { calcPlayerStats } from '../stats.js';
 
 let _selectedRound = null;
 let _escParciaisMap = {};
+let _escalacoesRank = {}; // atletaId -> rank position (1 = most picked)
 
 export async function renderEscalados(container) {
   const data = getData();
@@ -26,13 +27,27 @@ export async function renderEscalados(container) {
     });
   } catch { _escParciaisMap = {}; }
 
+  // Load mais escalados ranking from API (ordered by number of picks)
+  try {
+    const maisEscData = await fetchMaisEscalados();
+    const maisEsc = maisEscData?.atletas || [];
+    _escalacoesRank = {};
+    maisEsc.forEach((a, idx) => {
+      _escalacoesRank[a.atleta_id] = idx + 1; // rank 1 = most picked
+    });
+  } catch { _escalacoesRank = {}; }
+
   let ranked = buildRanking(probable);
   let currentPos = 0;
 
   function renderTable(posFilter) {
     let filtered = posFilter > 0 ? ranked.filter(a => a.posicao_id === posFilter) : ranked;
-    // Sort by popScore (proxy for most picked — combines media, form, efficiency)
-    filtered = [...filtered].sort((a, b) => (b.popScore || 0) - (a.popScore || 0)).slice(0, 30);
+    // Sort by API escalação rank (lower rank = more picked)
+    filtered = [...filtered].sort((a, b) => {
+      const ra = _escalacoesRank[a.atleta_id] || 99999;
+      const rb = _escalacoesRank[b.atleta_id] || 99999;
+      return ra - rb;
+    }).slice(0, 30);
 
     const tableEl = document.getElementById('escalados-table');
     if (!tableEl) return;
@@ -40,7 +55,7 @@ export async function renderEscalados(container) {
     tableEl.innerHTML = `
       <div class="card-header">
         <div class="card-title">🏅 Ranking de Popularidade</div>
-        <div class="card-subtitle">${filtered.length} jogadores · Score baseado em média, preço e forma recente</div>
+        <div class="card-subtitle">${filtered.length} jogadores · Ranking de escalações via API do Cartola</div>
       </div>
       <div class="table-container">
         <table class="data-table">
@@ -50,7 +65,7 @@ export async function renderEscalados(container) {
               <th>Jogador</th>
               <th>Pos</th>
               <th>Time</th>
-              <th>Score</th>
+              <th>Rank</th>
               <th>Média</th>
               <th>Últ. Rod.</th>
               <th>Parcial</th>
@@ -74,7 +89,7 @@ export async function renderEscalados(container) {
                 </td>
                 <td><span class="position-badge ${a.position.class}">${a.position.abr}</span></td>
                 <td style="font-size:11px">${a.clubName}</td>
-                <td style="font-weight:800;color:var(--accent-blue)">${(a.popScore || 0).toFixed(1)}</td>
+                <td style="font-weight:800;color:var(--accent-blue)">${_escalacoesRank[a.atleta_id] ? '#' + _escalacoesRank[a.atleta_id] : '-'}</td>
                 <td style="font-weight:700;color:var(--accent-green)">${a.media_num.toFixed(2)}</td>
                 <td style="color:var(--accent-gold)">${a.recentAvg.toFixed(1)}</td>
                 <td style="font-weight:700;color:${(_escParciaisMap[a.atleta_id] || 0) > 0 ? 'var(--accent-green)' : (_escParciaisMap[a.atleta_id] || 0) < 0 ? 'var(--accent-red)' : 'var(--text-muted)'}">${_escParciaisMap[a.atleta_id] != null ? _escParciaisMap[a.atleta_id].toFixed(1) : '-'}</td>

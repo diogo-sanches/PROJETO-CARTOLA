@@ -78,6 +78,14 @@ export async function fetchScoredByRound(round) {
   }
 }
 
+export async function fetchMaisEscalados() {
+  try {
+    return await fetchJSON('/atletas/mercado?orderBy=escalacoes');
+  } catch {
+    return { atletas: [] };
+  }
+}
+
 // ===== DATA HELPERS =====
 
 const POSITION_MAP = {
