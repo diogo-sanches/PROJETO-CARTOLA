@@ -132,19 +132,17 @@ function renderScoredTable(posFilter) {
   const total = rows.length;
   const avgPts = total > 0 ? rows.reduce((s, r) => s + r.pontuacao, 0) / total : 0;
 
-  // Build scout summary for each row
+  // Build scout summary for each row — show ALL scouts
+  const scoutEmoji = {
+    G: '⚽', A: '🅰️', SG: '🧤', DE: '🧱', DS: '💪', FD: '🎯',
+    FS: '🦶', V: '🏆', PE: '🥅', FF: '📐', FT: '🪵',
+    CA: '🟨', CV: '🟥', GS: '😰', GC: '❌', FC: '🏳️', PP: '🚫', I: '🏳️‍⬛',
+  };
   function scoutSummary(scout) {
-    const parts = [];
-    if (scout.G) parts.push(`⚽${scout.G}`);
-    if (scout.A) parts.push(`🅰️${scout.A}`);
-    if (scout.SG) parts.push(`🧤${scout.SG}`);
-    if (scout.DE) parts.push(`🧱${scout.DE}`);
-    if (scout.DS) parts.push(`💪${scout.DS}`);
-    if (scout.CA) parts.push(`🟨${scout.CA}`);
-    if (scout.CV) parts.push(`🟥${scout.CV}`);
-    if (scout.GC) parts.push(`❌${scout.GC}`);
-    if (scout.GS) parts.push(`😰${scout.GS}`);
-    return parts.join(' ') || '-';
+    return Object.entries(scout || {})
+      .filter(([, v]) => v > 0 || v < 0)
+      .map(([k, v]) => `${scoutEmoji[k] || ''}${k === 'I' ? '' : ''}${v}`)
+      .join(' ') || '-';
   }
 
   container.innerHTML = `

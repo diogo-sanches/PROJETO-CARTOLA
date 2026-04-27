@@ -1,11 +1,12 @@
 // ===== MAIS ESCALADOS VIEW =====
-import { getData, formatPrice, formatVariation, getPosition, fetchScoredByRound } from '../api.js';
+import { getData, formatPrice, formatVariation, getPosition, fetchScoredByRound, fetchScored } from '../api.js';
 import { isHistoryLoaded, onHistoryLoaded, getRoundScored } from '../history.js';
 import { calcPlayerStats } from '../stats.js';
 
 let _selectedRound = null;
+let _escParciaisMap = {};
 
-export function renderEscalados(container) {
+export async function renderEscalados(container) {
   const data = getData();
   if (!data) return;
 
@@ -15,12 +16,23 @@ export function renderEscalados(container) {
 
   const probable = athletes.filter(a => a.status_id === 7 && a.jogos_num > 0);
 
+  // Load parciais
+  try {
+    const scored = await fetchScored();
+    const atletas = scored?.atletas || {};
+    _escParciaisMap = {};
+    Object.entries(atletas).forEach(([id, s]) => {
+      _escParciaisMap[parseInt(id)] = s.pontuacao || 0;
+    });
+  } catch { _escParciaisMap = {}; }
+
   let ranked = buildRanking(probable);
   let currentPos = 0;
 
   function renderTable(posFilter) {
     let filtered = posFilter > 0 ? ranked.filter(a => a.posicao_id === posFilter) : ranked;
-    filtered = [...filtered].sort((a, b) => b.popScore - a.popScore).slice(0, 30);
+    // Sort by popScore (proxy for most picked — combines media, form, efficiency)
+    filtered = [...filtered].sort((a, b) => (b.popScore || 0) - (a.popScore || 0)).slice(0, 30);
 
     const tableEl = document.getElementById('escalados-table');
     if (!tableEl) return;
@@ -38,12 +50,13 @@ export function renderEscalados(container) {
               <th>Jogador</th>
               <th>Pos</th>
               <th>Time</th>
+              <th>Score</th>
               <th>Média</th>
-              <th>Recente</th>
+              <th>Últ. Rod.</th>
+              <th>Parcial</th>
               <th>Preço</th>
               <th>C/B</th>
               <th>Var</th>
-              <th>Score</th>
             </tr>
           </thead>
           <tbody>
@@ -61,12 +74,13 @@ export function renderEscalados(container) {
                 </td>
                 <td><span class="position-badge ${a.position.class}">${a.position.abr}</span></td>
                 <td style="font-size:11px">${a.clubName}</td>
+                <td style="font-weight:800;color:var(--accent-blue)">${(a.popScore || 0).toFixed(1)}</td>
                 <td style="font-weight:700;color:var(--accent-green)">${a.media_num.toFixed(2)}</td>
                 <td style="color:var(--accent-gold)">${a.recentAvg.toFixed(1)}</td>
+                <td style="font-weight:700;color:${(_escParciaisMap[a.atleta_id] || 0) > 0 ? 'var(--accent-green)' : (_escParciaisMap[a.atleta_id] || 0) < 0 ? 'var(--accent-red)' : 'var(--text-muted)'}">${_escParciaisMap[a.atleta_id] != null ? _escParciaisMap[a.atleta_id].toFixed(1) : '-'}</td>
                 <td>${formatPrice(a.preco_num)}</td>
                 <td style="font-size:12px">${a.efficiency.toFixed(2)}</td>
                 <td class="${varClass}">${formatVariation(a.variacao_num)}</td>
-                <td style="font-weight:800;color:var(--accent-blue)">${a.popScore.toFixed(1)}</td>
               </tr>`;
             }).join('')}
           </tbody>

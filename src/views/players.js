@@ -1,5 +1,5 @@
 // ===== PLAYERS VIEW =====
-import { getData, getPosition, getStatus, getScoutLabel, formatPrice, formatVariation, fetchMatchesByRound } from '../api.js';
+import { getData, getPosition, getStatus, getScoutLabel, formatPrice, formatVariation, fetchMatchesByRound, fetchScored } from '../api.js';
 import { isHistoryLoaded, onHistoryLoaded, getClubMatches } from '../history.js';
 import { calcClubStats } from '../stats.js';
 
@@ -9,6 +9,7 @@ let currentPage = 1;
 const PAGE_SIZE = 25;
 let _matchDataMap = {}; // clubId -> { isHome, opponentName, opponentBadge }
 let _sgTeams = new Set(); // clubIds predicted to keep clean sheet
+let _parciaisMap = {}; // atletaId -> { pontuacao, scout }
 
 export async function renderPlayers(container) {
   const data = getData();
@@ -19,6 +20,16 @@ export async function renderPlayers(container) {
 
   // Load current round matches to determine Casa/Fora
   await loadMatchData(market.rodada_atual, clubs);
+
+  // Load parciais for current round scores
+  try {
+    const scored = await fetchScored();
+    const atletas = scored?.atletas || {};
+    _parciaisMap = {};
+    Object.entries(atletas).forEach(([id, s]) => {
+      _parciaisMap[parseInt(id)] = { pontuacao: s.pontuacao || 0, scout: s.scout || {} };
+    });
+  } catch { _parciaisMap = {}; }
 
   container.innerHTML = `
     <div class="animate-in">
@@ -243,8 +254,8 @@ function getFilteredAthletes() {
 
   // Sort
   athletes.sort((a, b) => {
-    let va = currentSort.key === 'mpv' ? a.preco_num * 0.25 : a[currentSort.key];
-    let vb = currentSort.key === 'mpv' ? b.preco_num * 0.25 : b[currentSort.key];
+    let va = currentSort.key === 'mpv' ? a.preco_num * 0.25 : currentSort.key === 'parcial' ? (_parciaisMap[a.atleta_id]?.pontuacao || 0) : a[currentSort.key];
+    let vb = currentSort.key === 'mpv' ? b.preco_num * 0.25 : currentSort.key === 'parcial' ? (_parciaisMap[b.atleta_id]?.pontuacao || 0) : b[currentSort.key];
     if (typeof va === 'string') {
       va = va.toLowerCase();
       vb = vb.toLowerCase();
@@ -278,7 +289,7 @@ function updateTable() {
     { key: '_mando', label: 'Mando', sortable: false },
     { key: '_adversario', label: 'Adversário', sortable: false },
     { key: 'status_id', label: 'Status', sortable: true },
-    { key: 'pontos_num', label: 'Pts', sortable: true },
+    { key: 'parcial', label: 'Parcial', sortable: true },
     { key: 'media_num', label: 'Média', sortable: true },
     { key: 'preco_num', label: 'Preço', sortable: true },
     { key: 'mpv', label: 'MPV', sortable: true },
@@ -330,7 +341,8 @@ function updateTable() {
 
 function renderPlayerRow(a) {
   const varClass = a.variacao_num > 0 ? 'value-positive' : a.variacao_num < 0 ? 'value-negative' : 'value-neutral';
-  const ptsClass = a.pontos_num > 0 ? 'value-positive' : a.pontos_num < 0 ? 'value-negative' : 'value-neutral';
+  const parcialData = _parciaisMap[a.atleta_id];
+  const parcialPts = parcialData ? parcialData.pontuacao : null;
 
   const scoutEntries = Object.entries(a.scout || {});
   const matchInfo = _matchDataMap[a.clube_id];
@@ -366,7 +378,7 @@ function renderPlayerRow(a) {
         </div>
       </td>
       <td><span class="status-badge ${a.status.class}">${a.status.icon} ${a.status.nome}</span></td>
-      <td><span class="${ptsClass}" style="font-weight:700">${a.pontos_num.toFixed(1)}</span></td>
+      <td><span class="${parcialPts > 0 ? 'value-positive' : parcialPts < 0 ? 'value-negative' : 'value-neutral'}" style="font-weight:700">${parcialPts !== null ? parcialPts.toFixed(1) : '-'}</span></td>
       <td><span style="font-weight:700">${a.media_num.toFixed(2)}</span></td>
       <td style="font-weight:600">${formatPrice(a.preco_num)}</td>
       <td style="font-weight:600;color:var(--accent-orange)">${(a.preco_num * 0.25).toFixed(2)}</td>

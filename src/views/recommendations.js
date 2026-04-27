@@ -1,11 +1,12 @@
 // ===== RECOMMENDATIONS VIEW =====
 // Strategy tabs + Position submenu on ALL tabs
-import { getData, getClubAthletes, formatPrice, formatVariation, fetchMatchesByRound } from '../api.js';
+import { getData, getClubAthletes, formatPrice, formatVariation, fetchMatchesByRound, fetchScored } from '../api.js';
 import { isHistoryLoaded, onHistoryLoaded, getClubMatches } from '../history.js';
 import { calcPlayerStats, calcClubStats, analyzeConfronto } from '../stats.js';
 
 let _matchContext = {}; // clubId -> { isHome, opponentId, opponentName, opponentStrength }
 let _matchContextLoaded = false;
+let _recParciaisMap = {}; // atletaId -> pontuacao
 
 async function loadMatchContext() {
   if (_matchContextLoaded) return;
@@ -53,6 +54,16 @@ async function loadMatchContext() {
   } catch (e) {
     console.warn('Could not load match context for recommendations:', e);
   }
+
+  // Load parciais
+  try {
+    const scored = await fetchScored();
+    const atletas = scored?.atletas || {};
+    _recParciaisMap = {};
+    Object.entries(atletas).forEach(([id, s]) => {
+      _recParciaisMap[parseInt(id)] = s.pontuacao || 0;
+    });
+  } catch { _recParciaisMap = {}; }
 }
 
 let currentTab = 'mitar';
@@ -291,7 +302,8 @@ function renderMitar(body, data) {
               <th>Pos</th>
               ${sortHeader('Score', 'mitarScore')}
               ${sortHeader('Média', 'media')}
-              ${sortHeader('Recente', 'recentAvg')}
+              ${sortHeader('Últ. Rod.', 'recentAvg')}
+              <th>Parcial</th>
               ${sortHeader('Preço', 'preco')}
               ${sortHeader('Consist.', 'consistencia')}
               ${sortHeader('Trend', 'trend')}
@@ -317,6 +329,7 @@ function renderMitar(body, data) {
                   <td style="font-weight:800;color:var(--accent-gold)">${a.mitarScore.toFixed(1)}</td>
                   <td style="font-weight:700;color:var(--accent-green)">${a.media_num.toFixed(2)}</td>
                   <td style="color:var(--accent-gold)">${a.recentAvg?.toFixed(1) || '-'}</td>
+                  <td style="font-weight:700;color:${(_recParciaisMap[a.atleta_id] || 0) > 0 ? 'var(--accent-green)' : (_recParciaisMap[a.atleta_id] || 0) < 0 ? 'var(--accent-red)' : 'var(--text-muted)'}">${_recParciaisMap[a.atleta_id] != null ? _recParciaisMap[a.atleta_id].toFixed(1) : '-'}</td>
                   <td>${formatPrice(a.preco_num)}</td>
                   <td style="font-size:12px">${stars}</td>
                   <td>${trend}</td>
