@@ -6,6 +6,9 @@ import { calcPlayerStats } from '../stats.js';
 let _selectedRound = null;
 let _escParciaisMap = {};
 let _escalacoesRank = {}; // atletaId -> rank position (1 = most picked)
+let _currentSort = { key: 'rank', dir: 'asc' };
+let _currentPos = 0;
+let _ranked = [];
 
 export async function renderEscalados(container) {
   const data = getData();
@@ -25,7 +28,7 @@ export async function renderEscalados(container) {
     Object.entries(atletas).forEach(([id, s]) => {
       _escParciaisMap[parseInt(id)] = s.pontuacao || 0;
     });
-  } catch { _escParciaisMap = {}; }
+  } catch (e) { _escParciaisMap = {}; }
 
   // Load mais escalados ranking from API (ordered by number of picks)
   try {
@@ -33,76 +36,13 @@ export async function renderEscalados(container) {
     const maisEsc = maisEscData?.atletas || [];
     _escalacoesRank = {};
     maisEsc.forEach((a, idx) => {
-      _escalacoesRank[a.atleta_id] = idx + 1; // rank 1 = most picked
+      _escalacoesRank[a.atleta_id] = idx + 1;
     });
-  } catch { _escalacoesRank = {}; }
+  } catch (e) { _escalacoesRank = {}; }
 
-  let ranked = buildRanking(probable);
-  let currentPos = 0;
-
-  function renderTable(posFilter) {
-    let filtered = posFilter > 0 ? ranked.filter(a => a.posicao_id === posFilter) : ranked;
-    // Sort by API escalação rank (lower rank = more picked)
-    filtered = [...filtered].sort((a, b) => {
-      const ra = _escalacoesRank[a.atleta_id] || 99999;
-      const rb = _escalacoesRank[b.atleta_id] || 99999;
-      return ra - rb;
-    }).slice(0, 30);
-
-    const tableEl = document.getElementById('escalados-table');
-    if (!tableEl) return;
-
-    tableEl.innerHTML = `
-      <div class="card-header">
-        <div class="card-title">🏅 Ranking de Popularidade</div>
-        <div class="card-subtitle">${filtered.length} jogadores · Ranking de escalações via API do Cartola</div>
-      </div>
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Jogador</th>
-              <th>Pos</th>
-              <th>Time</th>
-              <th>Rank</th>
-              <th>Média</th>
-              <th>Últ. Rod.</th>
-              <th>Parcial</th>
-              <th>Preço</th>
-              <th>C/B</th>
-              <th>Var</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filtered.map((a, i) => {
-              const varClass = a.variacao_num > 0 ? 'value-positive' : a.variacao_num < 0 ? 'value-negative' : 'value-neutral';
-              return `
-              <tr>
-                <td><span class="player-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
-                <td>
-                  <div style="display:flex;align-items:center;gap:8px">
-                    <img src="${a.clubBadge}" alt="" class="club-badge" onerror="this.style.display='none'">
-                    <span style="font-weight:600;cursor:pointer" onclick="window.__openPlayerProfile && window.__openPlayerProfile(${a.atleta_id}, '${a.apelido.replace(/'/g, "\\\\'")}')"
-                      onmouseover="this.style.color='var(--accent-green)'" onmouseout="this.style.color=''">${a.apelido}</span>
-                  </div>
-                </td>
-                <td><span class="position-badge ${a.position.class}">${a.position.abr}</span></td>
-                <td style="font-size:11px">${a.clubName}</td>
-                <td style="font-weight:800;color:var(--accent-blue)">${_escalacoesRank[a.atleta_id] ? '#' + _escalacoesRank[a.atleta_id] : '-'}</td>
-                <td style="font-weight:700;color:var(--accent-green)">${a.media_num.toFixed(2)}</td>
-                <td style="color:var(--accent-gold)">${a.recentAvg.toFixed(1)}</td>
-                <td style="font-weight:700;color:${(_escParciaisMap[a.atleta_id] || 0) > 0 ? 'var(--accent-green)' : (_escParciaisMap[a.atleta_id] || 0) < 0 ? 'var(--accent-red)' : 'var(--text-muted)'}">${_escParciaisMap[a.atleta_id] != null ? _escParciaisMap[a.atleta_id].toFixed(1) : '-'}</td>
-                <td>${formatPrice(a.preco_num)}</td>
-                <td style="font-size:12px">${a.efficiency.toFixed(2)}</td>
-                <td class="${varClass}">${formatVariation(a.variacao_num)}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
+  _ranked = buildRanking(probable);
+  _currentPos = 0;
+  _currentSort = { key: 'rank', dir: 'asc' };
 
   // Position summary cards
   const posCounts = {};
@@ -137,7 +77,7 @@ export async function renderEscalados(container) {
             const pc = posCounts[p];
             return `
             <div style="background:var(--bg-secondary);border-radius:var(--radius-md);padding:12px;text-align:center;cursor:pointer;transition:all var(--transition-fast);border:1px solid var(--border-color)"
-              onclick="document.querySelectorAll('.esc-pos-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');window.__filterEscPos(${p})"
+              onclick="window.__filterEscPos(${p})"
               class="esc-pos-btn"
               onmouseover="this.style.borderColor='var(--accent-green)'" onmouseout="this.style.borderColor='var(--border-color)'">
               <div style="font-size:20px;margin-bottom:4px">${pc.icon || '⚽'}</div>
@@ -167,7 +107,7 @@ export async function renderEscalados(container) {
     const round = parseInt(e.target.value);
     _selectedRound = round;
     await loadRoundData(round, probable);
-    renderTable(currentPos);
+    renderTable();
   });
 
   // Bind position filters
@@ -175,8 +115,8 @@ export async function renderEscalados(container) {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.pos-btn[data-escpos]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      currentPos = parseInt(btn.dataset.escpos);
-      renderTable(currentPos);
+      _currentPos = parseInt(btn.dataset.escpos);
+      renderTable();
     });
   });
 
@@ -184,21 +124,29 @@ export async function renderEscalados(container) {
     container.querySelectorAll('.pos-btn[data-escpos]').forEach(b => b.classList.remove('active'));
     const btn = container.querySelector(`.pos-btn[data-escpos="${pos}"]`);
     if (btn) btn.classList.add('active');
-    currentPos = pos;
-    renderTable(pos);
+    _currentPos = pos;
+    renderTable();
   };
 
-  renderTable(0);
+  window.__sortEsc = (key) => {
+    if (_currentSort.key === key) {
+      _currentSort.dir = _currentSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _currentSort = { key, dir: key === 'rank' ? 'asc' : 'desc' };
+    }
+    renderTable();
+  };
+
+  renderTable();
 
   if (!isHistoryLoaded()) {
     onHistoryLoaded(() => {
-      ranked = buildRanking(probable);
-      renderTable(currentPos);
+      _ranked = buildRanking(probable);
+      renderTable();
     });
   }
 
   async function loadRoundData(round, probablePlayers) {
-    // Load scored data for specific round to enrich ranking
     try {
       let scoredAtletas = {};
       if (isHistoryLoaded()) {
@@ -208,9 +156,7 @@ export async function renderEscalados(container) {
         const scoredData = await fetchScoredByRound(round);
         scoredAtletas = scoredData?.atletas || {};
       }
-
-      // Enrich ranking with round-specific points
-      ranked = probablePlayers.map(a => {
+      _ranked = probablePlayers.map(a => {
         const roundData = scoredAtletas[String(a.atleta_id)];
         const roundPts = roundData?.pontuacao || 0;
         const efficiency = a.preco_num > 0 ? a.media_num / a.preco_num : 0;
@@ -218,10 +164,99 @@ export async function renderEscalados(container) {
         const popScore = a.media_num * 0.4 + efficiency * 2 + recentAvg * 0.4;
         return { ...a, popScore, recentAvg, efficiency, stats: null };
       });
-    } catch {
-      ranked = buildRanking(probablePlayers);
+    } catch (e) {
+      _ranked = buildRanking(probablePlayers);
     }
   }
+}
+
+function sortHeader(label, key) {
+  const isActive = _currentSort.key === key;
+  const arrow = isActive ? (_currentSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
+  return `<th class="sortable-th ${isActive ? 'active' : ''}" onclick="window.__sortEsc('${key}')" style="cursor:pointer;user-select:none;white-space:nowrap">${label}${arrow}</th>`;
+}
+
+function getSortValue(a, key) {
+  switch (key) {
+    case 'rank': return _escalacoesRank[a.atleta_id] || 99999;
+    case 'media': return a.media_num || 0;
+    case 'recentAvg': return a.recentAvg || 0;
+    case 'parcial': return _escParciaisMap[a.atleta_id] || 0;
+    case 'preco': return a.preco_num || 0;
+    case 'cb': return a.efficiency || 0;
+    case 'variacao': return a.variacao_num || 0;
+    default: return 0;
+  }
+}
+
+function renderTable() {
+  const tableEl = document.getElementById('escalados-table');
+  if (!tableEl) return;
+
+  let filtered = _currentPos > 0 ? _ranked.filter(a => a.posicao_id === _currentPos) : [..._ranked];
+
+  // Sort
+  filtered.sort((a, b) => {
+    const va = getSortValue(a, _currentSort.key);
+    const vb = getSortValue(b, _currentSort.key);
+    return _currentSort.dir === 'asc' ? va - vb : vb - va;
+  });
+
+  filtered = filtered.slice(0, 50);
+
+  tableEl.innerHTML = `
+    <div class="card-header">
+      <div class="card-title">🏅 Ranking de Popularidade</div>
+      <div class="card-subtitle">${filtered.length} jogadores · Clique no cabeçalho para ordenar</div>
+    </div>
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Jogador</th>
+            <th>Pos</th>
+            <th>Time</th>
+            ${sortHeader('Rank', 'rank')}
+            ${sortHeader('Média', 'media')}
+            ${sortHeader('Últ. Rod.', 'recentAvg')}
+            ${sortHeader('Parcial', 'parcial')}
+            ${sortHeader('Preço', 'preco')}
+            ${sortHeader('C/B', 'cb')}
+            ${sortHeader('Var', 'variacao')}
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.map((a, i) => {
+            const varClass = a.variacao_num > 0 ? 'value-positive' : a.variacao_num < 0 ? 'value-negative' : 'value-neutral';
+            const rank = _escalacoesRank[a.atleta_id];
+            const parcial = _escParciaisMap[a.atleta_id];
+            const parcialColor = (parcial || 0) > 0 ? 'var(--accent-green)' : (parcial || 0) < 0 ? 'var(--accent-red)' : 'var(--text-muted)';
+            return `
+            <tr>
+              <td><span class="player-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <img src="${a.clubBadge}" alt="" class="club-badge" onerror="this.style.display='none'">
+                  <span style="font-weight:600;cursor:pointer" onclick="window.__openPlayerProfile && window.__openPlayerProfile(${a.atleta_id}, '${a.apelido.replace(/'/g, "\\\\'")}')"
+                    onmouseover="this.style.color='var(--accent-green)'" onmouseout="this.style.color=''">${a.apelido}</span>
+                </div>
+              </td>
+              <td><span class="position-badge ${a.position.class}">${a.position.abr}</span></td>
+              <td style="font-size:11px">${a.clubName}</td>
+              <td style="font-weight:800;color:var(--accent-blue)">${rank ? '#' + rank : '-'}</td>
+              <td style="font-weight:700;color:var(--accent-green)">${a.media_num.toFixed(2)}</td>
+              <td style="color:var(--accent-gold)">${a.recentAvg.toFixed(1)}</td>
+              <td style="font-weight:700;color:${parcialColor}">${parcial != null ? parcial.toFixed(1) : '-'}</td>
+              <td>${formatPrice(a.preco_num)}</td>
+              <td style="font-size:12px">${a.efficiency.toFixed(2)}</td>
+              <td class="${varClass}">${formatVariation(a.variacao_num)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function buildRanking(probable) {
@@ -242,4 +277,5 @@ function buildRanking(probable) {
 
 export function destroyEscalados() {
   delete window.__filterEscPos;
+  delete window.__sortEsc;
 }
