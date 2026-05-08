@@ -74,6 +74,7 @@ const TABS = [
   { id: 'mitar', label: '🔥 Mitar', desc: 'Alta média + consistência + contexto favorável (Liga Clássica)' },
   { id: 'tirocurto', label: '🎯 Tiro Curto', desc: 'Potencial explosivo + baixa escalação (Liga de Rodada Única)' },
   { id: 'ferrolho', label: '🔒 Ferrolho', desc: 'Defesa completa de 1 time com alta chance de SG' },
+  { id: 'artilharia', label: '⚔️ Artilharia', desc: 'Times com maior potencial ofensivo — MEI e ATA recomendados' },
   { id: 'valorizar', label: '📈 Valorizar', desc: 'Jogadores baratos com potencial de valorização' },
   { id: 'custo', label: '💰 Custo-Benefício', desc: 'Melhor rendimento por preço por posição' },
   { id: 'consistentes', label: '🎯 Consistentes', desc: 'Jogadores regulares, sem dente de serra' },
@@ -176,7 +177,7 @@ function renderTabContent() {
         <p style="color:var(--text-secondary);font-size:13px">${tab.desc}</p>
       </div>
       <div id="rec-tab-body">
-        ${!isHistoryLoaded() && ['mitar', 'tirocurto', 'ferrolho', 'consistentes'].includes(currentTab) ? `
+        ${!isHistoryLoaded() && ['mitar', 'tirocurto', 'ferrolho', 'artilharia', 'consistentes'].includes(currentTab) ? `
           <div class="card" style="text-align:center;padding:30px">
             <div class="loading-spinner" style="margin:0 auto 12px"></div>
             <p style="color:var(--text-secondary);font-size:13px">Carregando dados históricos para análise avançada...</p>
@@ -192,6 +193,7 @@ function renderTabContent() {
     case 'mitar': renderMitar(body, data); break;
     case 'tirocurto': renderTiroCurto(body, data); break;
     case 'ferrolho': renderFerrolho(body, data); break;
+    case 'artilharia': renderArtilharia(body, data); break;
     case 'valorizar': renderValorizar(body, data); break;
     case 'custo': renderCustoBeneficio(body, data); break;
     case 'consistentes': renderConsistentes(body, data); break;
@@ -602,6 +604,143 @@ function renderFerrolho(body, data) {
             }).join('')}
           </div>
           ` : '<p style="color:var(--text-muted);font-size:12px">Sem defensores disponíveis (Provável)</p>'}
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+// ============================
+// TAB: ⚔️ ARTILHARIA (Times com maior potencial ofensivo)
+// ============================
+function renderArtilharia(body, data) {
+  const { athletes, clubs, market } = data;
+
+  if (!isHistoryLoaded()) {
+    body.innerHTML = `<div class="card" style="text-align:center;padding:30px"><p style="color:var(--text-muted)">Aguardando dados históricos...</p></div>`;
+    onHistoryLoaded(() => { if (currentTab === 'artilharia') renderTabContent(); });
+    return;
+  }
+
+  // Compute league home/away averages (Dixon-Coles)
+  const clubIds = Object.keys(clubs).map(Number);
+  let lHGM=0,lHGS=0,lAGM=0,lAGS=0,lHG=0,lAG=0;
+  clubIds.forEach(id => {
+    const m = getClubMatches(id); if (!m?.length) return;
+    const h=m.filter(x=>x.isHome), a=m.filter(x=>!x.isHome);
+    lHGM+=h.reduce((s,x)=>s+x.goalsFor,0); lHGS+=h.reduce((s,x)=>s+x.goalsAgainst,0);
+    lAGM+=a.reduce((s,x)=>s+x.goalsFor,0); lAGS+=a.reduce((s,x)=>s+x.goalsAgainst,0);
+    lHG+=h.length; lAG+=a.length;
+  });
+  const aHGM=lHG>0?lHGM/lHG:1, aHGS=lHG>0?lHGS/lHG:1;
+  const aAGM=lAG>0?lAGM/lAG:1, aAGS=lAG>0?lAGS/lAG:1;
+
+  // Calculate expected goals FOR each team this round
+  const teamAtk = [];
+  Object.entries(_matchContext).forEach(([clubIdStr, ctx]) => {
+    const clubId = parseInt(clubIdStr);
+    const oppId = ctx.opponentId;
+    const myMatches = getClubMatches(clubId);
+    const oppMatches = getClubMatches(oppId);
+    if (!myMatches?.length || !oppMatches?.length) return;
+
+    const myHome = myMatches.filter(m => m.isHome);
+    const myAway = myMatches.filter(m => !m.isHome);
+    const oppHome = oppMatches.filter(m => m.isHome);
+    const oppAway = oppMatches.filter(m => !m.isHome);
+
+    let expGoalsFor;
+    if (ctx.isHome) {
+      // I'm home → my home attack vs opponent's away defense
+      const myHGM = myHome.length>0 ? myHome.reduce((s,m)=>s+m.goalsFor,0)/myHome.length : 0;
+      const oppAGS = oppAway.length>0 ? oppAway.reduce((s,m)=>s+m.goalsAgainst,0)/oppAway.length : 0;
+      expGoalsFor = (myHGM/Math.max(aHGM,0.3)) * (oppAGS/Math.max(aAGS,0.3)) * aHGM;
+    } else {
+      // I'm away → my away attack vs opponent's home defense
+      const myAGM = myAway.length>0 ? myAway.reduce((s,m)=>s+m.goalsFor,0)/myAway.length : 0;
+      const oppHGS = oppHome.length>0 ? oppHome.reduce((s,m)=>s+m.goalsAgainst,0)/oppHome.length : 0;
+      expGoalsFor = (myAGM/Math.max(aAGM,0.3)) * (oppHGS/Math.max(aHGS,0.3)) * aAGM;
+    }
+
+    // Prob of scoring at least 1 goal: P(X>=1) = 1 - P(0) = 1 - e^(-lambda)
+    const pGol = 1 - Math.exp(-expGoalsFor);
+
+    // Recent goal-scoring form (last 5 matches in relevant context)
+    const relevantMatches = ctx.isHome ? myHome.slice(-5) : myAway.slice(-5);
+    const recentGoals = relevantMatches.reduce((s, m) => s + m.goalsFor, 0);
+    const gamesWithGoals = relevantMatches.filter(m => m.goalsFor > 0).length;
+
+    // Available attackers (MEI + ATA with status = Provável)
+    const attackers = athletes.filter(a => a.clube_id === clubId && a.status_id === 7 && [4, 5].includes(a.posicao_id));
+    const clubName = clubs[clubId]?.nome_fantasia || '?';
+    const clubBadge = clubs[clubId]?.escudos?.['30x30'] || '';
+
+    teamAtk.push({
+      clubId, clubName, clubBadge, ctx,
+      expGoalsFor, pGol, recentGoals,
+      gamesWithGoals, relevantGames: relevantMatches.length,
+      attackers,
+      attackerCount: attackers.length,
+    });
+  });
+
+  teamAtk.sort((a, b) => b.expGoalsFor - a.expGoalsFor);
+
+  body.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">⚔️ Ranking de Artilharia</div>
+        <div class="card-subtitle">Times ordenados por gols esperados · Baseado no modelo Dixon-Coles</div>
+      </div>
+      <div class="card-subtitle" style="font-size:11px;color:var(--text-muted);margin-top:8px">
+        Estratégia: Escalar MEI e ATA de times com alto potencial ofensivo para maximizar G (8pts) e A (5pts)
+      </div>
+    </div>
+    ${teamAtk.slice(0, 10).map((t, i) => {
+      const pctGol = (t.pGol * 100).toFixed(0);
+      const barColor = t.expGoalsFor > 1.8 ? 'var(--accent-green)' : t.expGoalsFor > 1.2 ? 'var(--accent-orange)' : 'var(--accent-red)';
+      const mandoIcon = t.ctx.isHome ? '🏠 Casa' : '✈️ Fora';
+      const avgGoals = t.relevantGames > 0 ? (t.recentGoals / t.relevantGames).toFixed(1) : '0.0';
+      return `
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap">
+            <span style="font-size:20px;font-weight:800;color:var(--text-muted);min-width:30px">#${i + 1}</span>
+            <img src="${t.clubBadge}" alt="" style="width:32px;height:32px" onerror="this.style.display='none'">
+            <div>
+              <div style="font-weight:700;font-size:16px">${t.clubName}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${mandoIcon} vs ${t.ctx.opponentName}</div>
+            </div>
+            <div style="margin-left:auto;text-align:right">
+              <div style="font-size:24px;font-weight:800;color:${barColor}">${t.expGoalsFor.toFixed(2)}</div>
+              <div style="font-size:10px;color:var(--text-muted)">Gols esperados</div>
+            </div>
+          </div>
+          <div style="background:var(--bg-tertiary);border-radius:6px;height:8px;overflow:hidden;margin-bottom:12px">
+            <div style="width:${Math.min(pctGol, 100)}%;height:100%;background:${barColor};border-radius:6px;transition:width 0.3s"></div>
+          </div>
+          <div style="display:flex;gap:16px;font-size:12px;color:var(--text-secondary);margin-bottom:12px;flex-wrap:wrap">
+            <span>🎯 Prob. marcar: <b style="color:var(--accent-gold)">${pctGol}%</b></span>
+            <span>⚽ Gols recentes: <b>${t.recentGoals} em ${t.relevantGames} jogos</b> (${avgGoals}/jogo)</span>
+            <span>🔥 Jogos com gol: <b style="color:${t.gamesWithGoals >= 4 ? 'var(--accent-green)' : 'var(--accent-orange)'}">${t.gamesWithGoals}/${t.relevantGames}</b></span>
+            <span>👥 Atacantes disponíveis: <b style="color:${t.attackerCount >= 4 ? 'var(--accent-green)' : 'var(--accent-orange)'}">${t.attackerCount}</b></span>
+          </div>
+          ${t.attackerCount > 0 ? `
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${t.attackers.sort((a, b) => b.media_num - a.media_num).map(d => {
+              const pos = d.posicao_id === 4 ? { abr: 'MEI', cls: 'mei' } : { abr: 'ATA', cls: 'ata' };
+              const parcial = _recParciaisMap[d.atleta_id];
+              const parcialStr = parcial != null ? ` | Parc: ${parcial.toFixed(1)}` : '';
+              return `<div style="background:var(--bg-tertiary);border-radius:8px;padding:6px 10px;font-size:11px;display:flex;align-items:center;gap:6px;cursor:pointer"
+                onclick="window.__openPlayerProfile && window.__openPlayerProfile(${d.atleta_id}, '${d.apelido.replace(/'/g, "\\\\'")}')">
+                <span class="position-badge ${pos.cls}" style="font-size:9px;padding:1px 4px">${pos.abr}</span>
+                <span style="font-weight:600">${d.apelido}</span>
+                <span style="color:var(--text-muted)">Média ${d.media_num.toFixed(1)}</span>
+                <span style="color:var(--accent-green)">${formatPrice(d.preco_num)}</span>
+                ${parcialStr ? `<span style="color:var(--accent-gold);font-weight:600">${parcialStr}</span>` : ''}
+              </div>`;
+            }).join('')}
+          </div>
+          ` : '<p style="color:var(--text-muted);font-size:12px">Sem atacantes disponíveis (Provável)</p>'}
         </div>
       `;
     }).join('')}
